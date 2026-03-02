@@ -4,6 +4,7 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 // https://vitejs.dev/config/
 export default defineConfig({
+  base: '/ce-shipgen/',
   plugins: [
     react(),
     VitePWA({
@@ -19,17 +20,17 @@ export default defineConfig({
         theme_color: '#1a1a2e',
         background_color: '#1a1a2e',
         display: 'standalone',
-        scope: '/',
-        start_url: '/',
+        scope: '/ce-shipgen/',
+        start_url: '/ce-shipgen/',
         orientation: 'portrait',
         icons: [
           {
-            src: '/icon-192x192.png',
+            src: '/ce-shipgen/icon-192x192.png',
             sizes: '192x192',
             type: 'image/png'
           },
           {
-            src: '/icon-512x512.png',
+            src: '/ce-shipgen/icon-512x512.png',
             sizes: '512x512',
             type: 'image/png'
           }
