@@ -289,7 +289,11 @@ export default function JsonTableEditor({ onDataChange }: JsonEditorProps) {
         </div>
 
         {/* Table or JSON Editor */}
-        {viewMode === 'table' && validationStatus === 'valid' ? (
+        {isLoading ? (
+          <div className="p-8 text-center border border-space-600 rounded-lg">
+            <div className="animate-pulse text-gray-400">Loading data...</div>
+          </div>
+        ) : viewMode === 'table' && validationStatus === 'valid' ? (
           <div className="border border-space-600 rounded-lg overflow-hidden">
             <div className="p-3 bg-space-700 border-b border-space-600 flex items-center justify-between">
               <span className="text-sm font-medium text-gray-300">Data Editor</span>
