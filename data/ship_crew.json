@@ -1,9 +1,0 @@
-[
-  { "position": "Captain", "salaryPerWeek": 1500, "notes": "1 per ship" },
-  { "position": "Pilot", "salaryPerWeek": 1500, "notes": "1 minimum" },
-  { "position": "Navigator", "salaryPerWeek": 1250, "notes": "1 per ship or software" },
-  { "position": "Engineer", "salaryPerWeek": 1000, "notes": "1 per 35 tons drives/PP" },
-  { "position": "Gunner", "salaryPerWeek": 250, "notes": "1 per turret/bay" },
-  { "position": "Medic", "salaryPerWeek": 500, "notes": "1 per 120 passengers" },
-  { "position": "Steward", "salaryPerWeek": 750, "notes": "1 per 4 high / 10 middle passengers" }
-]

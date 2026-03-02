@@ -1,5 +1,0 @@
-[
-  { "id": "distributed", "name": "Distributed", "costModifier": 0.9, "atmosphericDM": -4, "canScoop": false, "notes": "Cannot mount fuel scoops" },
-  { "id": "standard", "name": "Standard", "costModifier": 1.0, "atmosphericDM": -2, "canScoop": true, "notes": "Can mount fuel scoops with DM-2" },
-  { "id": "streamlined", "name": "Streamlined", "costModifier": 1.1, "atmosphericDM": 0, "canScoop": true, "notes": "Built-in fuel scoops" }
-]

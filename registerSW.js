@@ -1,1 +1,0 @@
-if('serviceWorker' in navigator) {window.addEventListener('load', () => {navigator.serviceWorker.register('/ce-shipgen/sw.js', { scope: '/ce-shipgen/' })})}
