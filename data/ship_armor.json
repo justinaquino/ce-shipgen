@@ -1,0 +1,5 @@
+[
+  { "type": "titanium", "name": "Titanium Steel", "tl": 7, "protection": 2, "costFactor": 0.05 },
+  { "type": "crystaliron", "name": "Crystaliron", "tl": 10, "protection": 4, "costFactor": 0.20 },
+  { "type": "superdense", "name": "Bonded Superdense", "tl": 14, "protection": 6, "costFactor": 0.50 }
+]
