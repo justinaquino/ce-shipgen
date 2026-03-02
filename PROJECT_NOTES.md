@@ -1288,3 +1288,142 @@ None — this was a planning and documentation session only.
 *Session 3 duration: ~20 minutes*
 *Files changed: 2 (PRD.md, PROJECT_NOTES.md — documentation only)*
 *Next milestone: M2.5 — Install UX & Security hardening (FR-021, FR-022, FR-023)*
+
+---
+
+## Session 4 — March 2, 2026 (Settings Snapshot System + Workflow Refinement)
+
+**Timestamp:** March 2, 2026 (post Session 3)
+**Agent:** Claude Sonnet 4.6
+**Context:** User reviewed Session 3 recommendations and proposed a cleaner settings workflow. No code changed — planning and PRD only.
+
+---
+
+### Design Decision: Auto-Save + Named Snapshots
+
+**User input (verbatim intent):**
+> "the system when running always saves to local and people are actually just using the local. would they need a button or option to reset back to blank? and that means their version is saved?"
+
+> "there is a System settings saving (they can name) and they can save versions the default name has YYMMDD:HHMMSS"
+
+**What this means in practice:**
+
+Two separate but related concepts were clarified in this session:
+
+**Concept 1 — Auto-Save (workflow simplification)**
+
+The "Save Changes" button in the current table editor is unnecessary friction. Since localStorage is already persistent, the app should simply save on every cell commit. The user's working state is always current. There is no distinction between "edited" and "saved" in table view.
+
+The only exception is the JSON text editor — you cannot auto-save mid-edit because the JSON is invalid while typing. That mode keeps an explicit "Apply" button.
+
+This eliminates the concept of "my version vs web version" entirely. There is only ever one version — the user's live state in localStorage. The web defaults (`public/data/*.json`) are the factory reset point, not a separate "version."
+
+**Why "Reset to Blank" is wrong language:**
+"Blank" implies empty tables, which would break the ship designer (no hulls to choose from, no drives, etc.). The correct label is "Reset to Web Defaults" — meaning restore the canonical data from the shipped JSON files. The user's ships are never touched.
+
+**Concept 2 — Named Settings Snapshots (new feature FR-024)**
+
+Users can save named snapshots of their full settings state (all 13 tables + rules). This is the "their version is saved" concept — but more powerful, because they can have multiple named versions.
+
+The mental model is **save slots in a game**:
+- The live working state = the currently running game (always auto-saved)
+- A snapshot = a named save file (point-in-time copy)
+- Loading a snapshot = loading a save file (replaces live state)
+- Exporting a snapshot = copying a save file to share
+
+**Default name format: `YYMMDD:HHMMSS`**
+
+This was specified by the user. Examples:
+- `260302:193045` = March 2, 2026 at 19:30:45
+- Immediately descriptive without being verbose
+- Sortable chronologically as a string
+- Users can rename to anything meaningful: "Pirate Campaign", "Hard Science v2", "Stock CE Rules"
+
+---
+
+### New Storage Architecture
+
+**Before (Session 3 model):**
+```
+ce_shipgen_table_[id]    ← one key per customised table
+ce_shipgen_rules         ← rule preferences
+```
+
+**After (Session 4 model):**
+```
+ce_shipgen_live_[id]     ← live working tables (auto-saved, one per table)
+ce_shipgen_rules         ← live rule preferences (auto-saved)
+ce_shipgen_presets       ← JSON array of all named snapshots
+```
+
+Each snapshot in `ce_shipgen_presets` is a complete, self-contained object:
+```json
+{
+  "id": "260302:193045",
+  "name": "260302:193045",
+  "createdAt": "2026-03-02T19:30:45Z",
+  "updatedAt": "2026-03-02T19:30:45Z",
+  "tables": { "ship_hulls": [...], "ship_drives": [...], "...all 13 tables" },
+  "rules": { "ruleSet": "cepheus", "..." }
+}
+```
+
+**Key design decisions:**
+1. Snapshots include ALL 13 tables even for tables the user hasn't customised — captured from `public/data/*.json` at snapshot time. This makes snapshots fully portable and self-contained.
+2. Ship designs are stored separately and are never touched by any snapshot operation.
+3. Maximum 50 snapshots to prevent localStorage quota issues (~20-30KB per snapshot × 50 = ~1.5MB, well within the typical 5-10MB localStorage quota).
+
+---
+
+### What Changed vs. Session 3 FR-022
+
+Session 3 proposed a simple "Export My Settings" / "Import Settings" concept. Session 4 replaces this with a richer snapshot system that:
+
+| Session 3 | Session 4 |
+|-----------|-----------|
+| Single "export all settings" function | Multiple named snapshots, each independently exportable |
+| No versioning — export is a point-in-time file | Named, browseable history of saved states |
+| Import replaces current settings | Import adds to snapshot list without auto-loading |
+| No naming | User-defined names, default `YYMMDD:HHMMSS` |
+| No list view | Snapshots list with load/rename/export/delete per entry |
+
+FR-022b (Reset to Web Defaults) is unchanged — it still only resets the live state, not snapshots.
+
+---
+
+### Interaction with PWA Install (FR-021)
+
+With auto-save confirmed, the install prompt framing changes:
+
+- **Before:** "Save to desktop to keep your version" (misleading — localStorage works in browser tab too)
+- **After:** "Install for offline use" (accurate — the real benefit of PWA install is offline capability and more persistent storage)
+
+The "installed" indicator in the header still makes sense — it tells users they have the offline-capable version. But it is no longer about data persistence (which already works in browser).
+
+---
+
+### Open Questions Noted for Implementation
+
+1. **Snapshot size limit warning:** At what point do we warn users they're approaching the localStorage quota? Suggested: warn at 40 snapshots, hard cap at 50.
+2. **Snapshot conflict on import:** If an imported snapshot has the same name as an existing one, append ` (imported)` to avoid silent overwrite.
+3. **Active snapshot tracking:** After loading a snapshot, should the app remember which one is "active" so it can highlight it in the list? Yes — store `ce_shipgen_active_preset_id` in localStorage.
+4. **Auto-snapshot on reset:** Should "Reset to Web Defaults" automatically save a snapshot of the current state first, so the user can recover? This is a nice safety net but adds complexity — mark as optional/nice-to-have.
+
+---
+
+### Files Changed This Session
+
+None — documentation only.
+
+**PRD changes:**
+- FR-022 revised: auto-save model, removed simple export/import concept
+- FR-024 added: full Settings Snapshot specification
+- Risk register updated
+- Milestone M2.5 scope updated to include FR-024
+
+---
+
+*Session 4 notes written: March 2, 2026*
+*Session 4 duration: ~15 minutes*
+*Files changed: 2 (PRD.md, PROJECT_NOTES.md — documentation only)*
+*Next milestone: M2.5 — Auto-save + Snapshots + Install UX + Security (FR-021–024)*

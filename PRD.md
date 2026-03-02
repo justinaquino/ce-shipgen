@@ -535,51 +535,72 @@ Users visiting the web version have no clear signal that the app can be saved to
 
 ---
 
-### 11.2 Local vs. Web Version Workflow (FR-022)
+### 11.2 Auto-Save & Settings Workflow (FR-022) — Revised
 
 **Priority:** High
-**Problem Statement:**
-The user needs to test the experience of "saving" a personal version (with custom tables/rules) vs. reverting back to the canonical web defaults. The app already separates defaults (JSON files in `public/data/`) from user customisations (localStorage), but there is no UX to make this explicit or manageable.
+**Revised:** March 2, 2026 (Session 4) — original export/import concept superseded by Settings Snapshots (FR-024)
 
-**Data Architecture (existing, correct):**
+**Core Principle:**
+The app always auto-saves. There is no "Save" button for table edits. The user's working state is always current. The canonical `public/data/*.json` files are read-only factory defaults — they are never modified. The user's personal layer lives entirely in localStorage on top of those defaults.
 
-| Layer | Storage | Contains | Resettable? |
-|-------|---------|----------|-------------|
-| Canonical defaults | `public/data/*.json` (shipped files) | Rule tables as authored | No (read-only) |
-| User customisations | `localStorage` (`ce_shipgen_table_*`) | Edited table data | Yes — "Reset to Default" |
-| Rule preferences | `localStorage` (`ce_shipgen_rules`) | CE/Mneme/Custom toggles | Yes |
-| Ship library | `localStorage` / IndexedDB | Saved ship designs | No — user data, never auto-reset |
+**Data Architecture:**
+
+| Layer | Storage | Contains | User action to reset |
+|-------|---------|----------|---------------------|
+| Factory defaults | `public/data/*.json` (shipped) | Canonical rule tables | N/A — read-only |
+| Live working state | `localStorage` (`ce_shipgen_live_*`) | Current tables + rules, always current | "Reset to Defaults" |
+| Named snapshots | `localStorage` (`ce_shipgen_presets`) | Array of saved settings states | Delete snapshot |
+| Ship library | `localStorage` / IndexedDB | Saved ship designs | Never auto-reset |
+
+**FR-022a: Auto-Save on Edit**
+- Table view: save to localStorage on every cell commit (blur or Enter key) — no Save button
+- JSON view: keep an explicit "Apply" button — needed because mid-edit JSON is invalid and cannot be auto-saved keystroke-by-keystroke
+- Show a brief "Saved" toast (1.5s) after each auto-save so the user has confirmation
+- No "unsaved changes" state in table view — every committed edit is immediately persisted
+
+**FR-022b: Reset Live State to Factory Defaults**
+- In Settings → Data Management: "Reset All to Defaults" button
+- Clears all `ce_shipgen_live_*` keys and `ce_shipgen_rules` from localStorage
+- **Never touches ship library data**
+- Confirmation dialog: "Reset all tables and rules to the original web defaults? Your saved ships will not be affected."
+- Label: "Reset to Web Defaults" — not "Reset to Blank" (blank = broken, defaults = known-good)
+
+**Acceptance Criteria:**
+- [ ] Table edits auto-save on cell commit with "Saved" toast
+- [ ] JSON view retains explicit "Apply" button
+- [ ] "Reset to Web Defaults" clears only settings, not ship library
+- [ ] No "Save" button visible in table edit mode
+
+---
+
+### 11.3 Input Security — Editable Tables (FR-023)
+
+**Priority:** High
+**Trigger:** When the app is made public, malicious actors may attempt to inject harmful content via the editable table fields. The following requirements govern how user-supplied data is handled.
+
+**Threat Model:**
+
+| Threat | Vector | Risk Level | Notes |
+|--------|--------|------------|-------|
+| Stored XSS | Inject `<script>` or event handlers into table string fields | Low (mitigated by React) | React renders text nodes, not HTML, so `String(value)` in JSX is safe |
+| HTML injection via `dangerouslySetInnerHTML` | Any future use of `innerHTML` with table data | **High if introduced** | Currently not used — must never be introduced with table data |
+| Prototype pollution via JSON.parse | `{"__proto__": {"isAdmin": true}}` in imported JSON | Low (modern JS engines block this) | Use `Object.create(null)` pattern for sensitive parsing |
+| Schema confusion / type mismatch | String in numeric field causes NaN in calculations | Medium | Currently no schema validation — calculation engine will inherit garbage |
+| Malicious JSON import shared between users | User A crafts a JSON file, shares with User B who imports it | Medium | Content is rendered safely by React, but could break calculations |
+| localStorage tampering (browser console) | User directly edits localStorage keys | Low (self-inflicted) | Out of scope — local storage is the user's own environment |
+
+**Current Safety Status:**
+- ✅ React JSX text rendering is XSS-safe by default — `{String(value)}` produces text nodes
+- ✅ `title={String(value)}` attribute values are escaped by React
+- ✅ No `eval()`, `Function()`, or `dangerouslySetInnerHTML` used with table data
+- ⚠️ No schema validation on import — invalid types reach the calculation engine
+- ⚠️ No string sanitization — HTML tags in fields are harmless now but risky if future code ever uses innerHTML
+- ⚠️ No max-length enforcement on string fields
 
 **Requirements:**
 
-**FR-022a: "My Version" vs "Web Version" concept**
-- Treat "web version" as the canonical default state (all localStorage customisations absent)
-- Treat "installed/my version" as the user's working copy with their customisations
-- These are not separate codebases — same PWA, different localStorage state
-
-**FR-022b: Reset Settings to Web Defaults**
-- In Settings → Data Management section, add a "Reset All Tables to Defaults" button
-- This clears all `ce_shipgen_table_*` keys and `ce_shipgen_rules` from localStorage
-- **Does NOT touch ship library data** (IndexedDB / ship design keys)
-- Shows confirmation dialog: "This will reset all custom tables and rules. Your saved ships are not affected."
-- After reset, all tables reload from `public/data/*.json` (the web defaults)
-
-**FR-022c: Export My Version**
-- Add "Export My Settings" in Settings → Data Management
-- Exports all current localStorage table customisations as a single JSON bundle
-- Format: `{ "version": "1.0", "exported": "<timestamp>", "tables": { "ship_hulls": [...], ... }, "rules": {...} }`
-- User can share this file to replicate their setup on another device
-
-**FR-022d: Import Settings Bundle**
-- Add "Import Settings" button accepting the export format above
-- Validates schema before applying
-- Does not overwrite ship library
-
-**Acceptance Criteria:**
-- [ ] "Reset All Tables to Defaults" works without touching ship library
-- [ ] "Export My Settings" produces valid importable JSON
-- [ ] "Import Settings" validates and applies cleanly
-- [ ] Installed-mode users can distinguish their customised state from defaults
+**FR-023a: Schema Validation on Import**
+- When importing a JSON table, validate each row against the expected schema for that table
 
 ---
 
@@ -646,7 +667,121 @@ The user needs to test the experience of "saving" a personal version (with custo
 
 ---
 
-### 11.4 Updated Risk Register
+### 11.4 Settings Snapshots (FR-024) — NEW
+
+**Priority:** High
+**Added:** March 2, 2026 (Session 4)
+
+**Problem Statement:**
+The auto-save model (FR-022a) keeps the user's live working state always current. But users need the ability to name and preserve distinct settings configurations — for example, a "Hard Science" variant, a "Pirate Campaign" variant, and a "Standard CE" baseline. These are named snapshots of the full settings state (all 13 tables + rules) that can be loaded, exported, imported, and deleted.
+
+**Concept:**
+Think of it like save slots in a game. The live working state is the active game. Snapshots are save files. You can save at any point, name the save, reload it later, or share it with another player.
+
+---
+
+**FR-024a: Snapshot Storage Structure**
+
+All snapshots stored under a single localStorage key:
+```
+ce_shipgen_presets  →  Array of Preset objects
+```
+
+Preset object schema:
+```json
+{
+  "id": "260302:193045",
+  "name": "260302:193045",
+  "createdAt": "2026-03-02T19:30:45Z",
+  "updatedAt": "2026-03-02T19:30:45Z",
+  "tables": {
+    "ship_hulls": [ ... ],
+    "ship_drives": [ ... ],
+    "...": "all 13 tables"
+  },
+  "rules": {
+    "ruleSet": "cepheus",
+    "bridgeCalculation": "ce_fixed",
+    "...": "full RuleSet object"
+  }
+}
+```
+
+**Default name format:** `YYMMDD:HHMMSS` — generated at the moment of save
+- Example: `260302:193045` = March 2, 2026 at 19:30:45
+- User can rename at any time before or after saving
+
+---
+
+**FR-024b: Save Snapshot**
+- Button: "Save Snapshot" in Settings → Data Management
+- Default name pre-filled as `YYMMDD:HHMMSS` (editable inline before confirming)
+- Captures full current state: all 13 live tables + current rule preferences
+- Tables that haven't been customised are captured from `public/data/*.json` defaults at save time, so the snapshot is always a complete, self-contained copy
+- If a snapshot with the same name already exists, prompt: "Overwrite existing snapshot '[name]'?"
+- Maximum 50 snapshots stored (show warning when approaching limit)
+
+**FR-024c: Snapshots List**
+- Display as a card list or table in Settings → Data Management
+- Each entry shows:
+  - Name (editable inline — click to rename)
+  - Created timestamp (human-readable: "Mar 2, 2026 19:30")
+  - Active indicator — highlight which snapshot is currently loaded (if any)
+- Actions per snapshot:
+  - **Load** — replaces live working state with this snapshot's tables and rules
+  - **Rename** — inline edit of name field
+  - **Export** — downloads this snapshot as a `.json` file
+  - **Delete** — removes with confirmation
+
+**FR-024d: Load Snapshot**
+- Replaces all `ce_shipgen_live_*` keys and `ce_shipgen_rules` in localStorage with the snapshot's data
+- Shows confirmation if live state has unsaved-since-last-snapshot changes (optional, low priority)
+- After load, marks that snapshot as "active" in the list
+- Toast: "Loaded '[name]'"
+
+**FR-024e: Export Snapshot**
+- Downloads the snapshot as a `.json` file
+- Filename: `ce-shipgen-[name]-[YYMMDD].json`
+  - Example: `ce-shipgen-260302:193045-260302.json`
+  - Special characters in name are slugified for filename safety
+- File format is the full Preset object (self-contained, importable)
+
+**FR-024f: Import Snapshot**
+- Accepts `.json` files in the Preset object format
+- Validates schema on import (per FR-023a)
+- On success: adds to the snapshots list without automatically loading it
+- Prompt: "Snapshot imported as '[name]'. Load it now?"
+- If name conflicts with existing snapshot, append ` (imported)` to the name
+
+**FR-024g: Rename Snapshot**
+- Click the name in the list to enter inline edit mode
+- Press Enter or click away to confirm
+- Names must be non-empty, max 80 characters
+- Duplicate names are allowed (distinguished by timestamp in metadata)
+
+---
+
+**FR-024h: Relationship to "Reset to Web Defaults" (FR-022b)**
+- "Reset to Web Defaults" is still available and still only resets the live working state
+- It does NOT delete any snapshots — snapshots are preserved independently
+- Suggested workflow: save a snapshot before resetting, so you can restore your work
+
+---
+
+**Acceptance Criteria:**
+- [ ] "Save Snapshot" creates entry with default name `YYMMDD:HHMMSS`
+- [ ] User can rename snapshot before and after saving
+- [ ] Snapshots list shows all saved snapshots with timestamps
+- [ ] "Load" replaces live state and marks snapshot as active
+- [ ] "Export" downloads valid importable `.json` file
+- [ ] "Import" adds snapshot to list without auto-loading
+- [ ] "Delete" removes with confirmation
+- [ ] Ship library data is never touched by any snapshot operation
+- [ ] Snapshots survive page refresh (stored in localStorage)
+
+---
+
+### 11.5 Updated Risk Register
 
 | Risk | Likelihood | Impact | Mitigation | Status |
 |------|------------|--------|------------|--------|
@@ -658,22 +793,23 @@ The user needs to test the experience of "saving" a personal version (with custo
 | XSS via table fields | Low | High | React text rendering + sanitization on save | ⏳ FR-023 |
 | Schema corruption breaking calculations | Medium | High | Schema validation on import + type coercion on load | ⏳ FR-023 |
 | Users unaware app is installable | High | Medium | Install prompt + install-state indicator | ⏳ FR-021 |
-| Users lose customisations on device switch | Medium | Medium | Export/Import settings bundle | ⏳ FR-022 |
+| Users lose customisations on device switch | Medium | Medium | Settings snapshots export/import | ⏳ FR-024 |
+| localStorage quota exceeded (50+ snapshots) | Low | Medium | 50-snapshot cap + storage usage indicator | ⏳ FR-024 |
 
 ---
 
-### 11.5 Updated Milestone Plan
+### 11.6 Updated Milestone Plan
 
 | Milestone | Scope | Status |
 |-----------|-------|--------|
 | M1: UI Layout & Tiling | Layout, tiles, focus mode, PWA | ✅ Complete |
 | M2: Settings & Data Tables | JSON + table editors, all 13 tables, rule toggles | ✅ Complete |
-| M2.5: Install UX & Security | FR-021, FR-022, FR-023 | 🎯 Next |
+| M2.5: Install UX & Settings System | FR-021 (install), FR-022 (auto-save + reset), FR-023 (security), FR-024 (snapshots) | 🎯 Next |
 | M3: Ship Generation | 19-step wizard, BOQ, real-time calculations | ⏳ Pending |
 | M4: Persistence & Export | Ship library, JSON/CSV/text/print export | ⏳ Pending |
 
 ---
 
 **PRD Status:** LIVING DOCUMENT — updated per session
-**Last updated:** March 2, 2026 (Session 3)
-**Next implementation target:** M2.5 — Install UX & Security hardening
+**Last updated:** March 2, 2026 (Session 4)
+**Next implementation target:** M2.5 — Auto-save, Settings Snapshots, Install UX, Security
