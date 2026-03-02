@@ -307,6 +307,107 @@ Startup → [Generate Ship] → Design Workflow
 
 ---
 
+### 2.2 Logistic Calculators (Phase 2 - Future)
+
+#### FR-021: Supply Calculator
+**Priority:** High (Phase 2)
+**Description:** Recommend supplies for ships and calculate costs
+
+**Features:**
+- Calculate life support requirements based on crew size and journey duration
+- Fuel calculations for planned journeys (parsecs × consumption rate)
+- Maintenance supplies estimation (based on ship age and wear)
+- Cost estimation for complete resupply
+- Compare supply costs at different starports
+
+**Formulas:**
+- Life Support: man-days × supplies per day
+- Fuel: parsecs × 0.1 × hull tonnage
+- Maintenance: 0.1% of ship value per year
+
+**Acceptance:**
+- [ ] Accurate supply calculations for all ship types
+- [ ] Cost breakdown by category (life support, fuel, maintenance)
+- [ ] Multi-journey supply planning
+
+---
+
+#### FR-022: Inventory System
+**Priority:** High (Phase 2)
+**Description:** Track current balance of inventory over time
+
+**Features:**
+- Real-time resource tracking (fuel, food, air, water, spare parts)
+- Automated consumption based on crew size and operations
+- Low inventory warnings and alerts (configurable thresholds)
+- Multi-ship fleet inventory management
+- Historical consumption tracking
+
+**UI Components:**
+- Inventory dashboard with current levels
+- Visual indicators (green/yellow/red) for stock levels
+- Consumption rate charts
+- Reorder point alerts
+
+**Acceptance:**
+- [ ] Tracks all resource types accurately
+- [ ] Alerts when inventory below threshold
+- [ ] Supports multiple ships in fleet
+- [ ] Data persists across sessions
+
+---
+
+#### FR-023: Journey Table
+**Priority:** High (Phase 2)
+**Description:** Trip planning and resource tracking from Point A to Point B
+
+**Features:**
+- Row-based journey log (Origin → Destination)
+- Resource consumption calculation per journey
+- Parsecs traveled, time elapsed, fuel used
+- Passenger/freight manifest and income
+- Journey history and statistics
+
+**Table Columns:**
+- Date, Origin, Destination, Parsecs, Duration
+- Fuel Consumed, Life Support Used
+- Passengers, Freight, Mail
+- Income, Expenses, Net Profit
+
+**Acceptance:**
+- [ ] Add/edit/delete journey entries
+- [ ] Automatic resource consumption calculation
+- [ ] Income/expense tracking per journey
+- [ ] Export journey log as CSV
+
+---
+
+#### FR-024: Income Tracker
+**Priority:** High (Phase 2)
+**Description:** Financial management and profit/loss tracking over periods
+
+**Features:**
+- Revenue tracking: High/Middle/Low passengers, freight, mail, charters
+- Expense tracking: Fuel, maintenance, crew salaries, supplies, berthing
+- Profit/loss calculations per journey and per period (weekly/monthly/yearly)
+- Cash flow projections
+- Financial reports for ship operations
+
+**Dashboard:**
+- Total Revenue, Total Expenses, Net Profit
+- Revenue breakdown by source (pie chart)
+- Expense breakdown by category (bar chart)
+- Trend line showing profit/loss over time
+
+**Acceptance:**
+- [ ] All revenue sources tracked
+- [ ] All expense categories tracked
+- [ ] Accurate profit/loss calculations
+- [ ] Financial reports exportable
+- [ ] Projections based on historical data
+
+---
+
 ## 3. DATA REQUIREMENTS
 
 ### 3.1 Embedded Data
@@ -415,6 +516,11 @@ Key entities:
 ## 6. OUT OF SCOPE (Future Releases)
 
 ### Version 2.x (Future)
+- **Logistic Calculators** - Supply chain and economic management
+  - Supply Calculator: Life support, fuel, maintenance cost estimation
+  - Inventory System: Real-time resource tracking across fleet
+  - Journey Table: Trip planning with resource consumption
+  - Income Tracker: Revenue, expenses, profit/loss per journey and period
 - PDF export with ship diagrams
 - 3D ship viewer (basic)
 - Ship comparison tool

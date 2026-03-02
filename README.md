@@ -121,6 +121,35 @@ Licensed under **GPL v3** - you can:
   - Spin gravity calculations
   - Life support and infrastructure
 
+### Logistic Calculators (Major Feature)
+Comprehensive supply chain and economic management for ship operations:
+
+- **Supply Calculator** - Recommends supplies for ships and calculates costs
+  - Life support requirements (man-days, consumables)
+  - Fuel calculations for planned journeys
+  - Spare parts and maintenance supplies
+  - Cost estimation for resupply
+
+- **Inventory System** - Tracks current balance of inventory over time
+  - Real-time resource tracking (fuel, food, air, water)
+  - Automated consumption based on crew size and journey duration
+  - Low inventory warnings and alerts
+  - Multi-ship fleet inventory management
+
+- **Journey Table** - Trip planning from Point A to Point B
+  - Row-based journey log (Origin → Destination)
+  - Resource consumption calculation per journey
+  - Parsecs traveled, time elapsed
+  - Fuel costs, life support usage
+  - Revenue/passenger income per trip
+
+- **Income Tracker** - Financial management over periods
+  - Revenue tracking (passenger fares, freight, mail, charters)
+  - Expense tracking (fuel, maintenance, crew salaries, supplies)
+  - Profit/loss calculations per journey and per period
+  - Cash flow projections
+  - Financial reports for ship operations
+
 ### Long Term Vision
 - **TL6-TL9 Ship Library** - Low-tech ships transitioning between CE and Mneme tech levels
 - **Random Encounter Tables** - Use ship libraries to generate encounter tables
