@@ -1,0 +1,5 @@
+[
+  { "driveCode": "A", "jDriveTons": 10, "jDriveCostMCr": 10, "mDriveTons": 2, "mDriveCostMCr": 4, "pPlantTons": 4, "pPlantCostMCr": 8, "fuelPerWeek": 1.0 },
+  { "driveCode": "B", "jDriveTons": 15, "jDriveCostMCr": 20, "mDriveTons": 3, "mDriveCostMCr": 8, "pPlantTons": 7, "pPlantCostMCr": 16, "fuelPerWeek": 2.0 },
+  { "driveCode": "C", "jDriveTons": 20, "jDriveCostMCr": 30, "mDriveTons": 5, "mDriveCostMCr": 12, "pPlantTons": 10, "pPlantCostMCr": 24, "fuelPerWeek": 3.0 }
+]

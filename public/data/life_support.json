@@ -1,0 +1,6 @@
+[
+  { "type": "stateroom", "name": "Stateroom", "tons": 4.0, "costCr": 500000, "capacity": 2, "notes": "Standard accommodation" },
+  { "type": "lowBerth", "name": "Low Berth", "tons": 0.5, "costCr": 50000, "capacity": 1, "notes": "Hibernation berth" },
+  { "type": "emergencyBerth", "name": "Emergency Low Berth", "tons": 1.0, "costCr": 25000, "capacity": 3, "notes": "Survival only" },
+  { "type": "barracks", "name": "Barracks", "tons": 2.0, "costCr": 50000, "capacity": 1, "notes": "Marine accommodation" }
+]

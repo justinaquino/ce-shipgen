@@ -1,0 +1,12 @@
+[
+  { "hullCode": "1", "tons": 100, "costMCr": 2.0, "constructionWeeks": 36 },
+  { "hullCode": "2", "tons": 200, "costMCr": 8.0, "constructionWeeks": 44 },
+  { "hullCode": "3", "tons": 300, "costMCr": 12.0, "constructionWeeks": 52 },
+  { "hullCode": "4", "tons": 400, "costMCr": 16.0, "constructionWeeks": 60 },
+  { "hullCode": "5", "tons": 500, "costMCr": 32.0, "constructionWeeks": 68 },
+  { "hullCode": "6", "tons": 600, "costMCr": 48.0, "constructionWeeks": 76 },
+  { "hullCode": "7", "tons": 700, "costMCr": 64.0, "constructionWeeks": 84 },
+  { "hullCode": "8", "tons": 800, "costMCr": 80.0, "constructionWeeks": 92 },
+  { "hullCode": "9", "tons": 900, "costMCr": 90.0, "constructionWeeks": 100 },
+  { "hullCode": "A", "tons": 1000, "costMCr": 100.0, "constructionWeeks": 108 }
+]
