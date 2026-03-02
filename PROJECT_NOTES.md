@@ -1427,3 +1427,220 @@ None — documentation only.
 *Session 4 duration: ~15 minutes*
 *Files changed: 2 (PRD.md, PROJECT_NOTES.md — documentation only)*
 *Next milestone: M2.5 — Auto-save + Snapshots + Install UX + Security (FR-021–024)*
+
+---
+
+## Session 5 — M2.5 Implementation + CI/CD Pipeline
+
+**Date:** March 2, 2026
+**Status:** M2.5 Complete, CI/CD deployed
+
+---
+
+### M2.5 Implementation Summary
+
+All four M2.5 functional requirements were implemented and deployed in Session 5.
+
+**Files created:**
+- `src/types/pwa.d.ts` — `BeforeInstallPromptEvent` global type declaration
+- `src/components/settings/SettingsSnapshots.tsx` — full FR-024 component
+- `.github/workflows/deploy.yml` — FR-025 CI/CD pipeline
+
+**Files modified:**
+- `src/components/settings/JsonTableEditor.tsx` — export `DATA_TABLES`, auto-save, sanitization
+- `src/App.tsx` — online/offline/standalone status badges
+- `src/components/screens/StartupScreen.tsx` — PWA install prompt, iOS instructions, v0.2.5
+- `src/components/screens/SettingsScreen.tsx` — SettingsSnapshots wired in, `key={snapshotVersion}`
+
+**Deployed:** https://xunema.github.io/ce-shipgen/ via force-push to `gh-pages` (final manual deploy — replaced by CI/CD going forward)
+
+**PR opened:** https://github.com/justinaquino/ce-shipgen/pull/1 (xunema → justinaquino, awaiting review)
+
+---
+
+### Issue Encountered: pwa.d.ts Structure Error
+
+**What happened:** The initial `pwa.d.ts` declared `BeforeInstallPromptEvent` at module scope alongside `export {}`, making it a module. Because `BeforeInstallPromptEvent` was not inside `declare global {}`, it was invisible to other files without an import — triggering `error TS2304: Cannot find name 'BeforeInstallPromptEvent'` at build time.
+
+**Fix:** Move the interface declaration inside `declare global {}`:
+```typescript
+// Wrong — module scope, invisible globally
+interface BeforeInstallPromptEvent extends Event { ... }
+export {}
+
+// Correct — global augmentation
+declare global {
+  interface BeforeInstallPromptEvent extends Event { ... }
+}
+export {}
+```
+
+**Lesson:** Any `.d.ts` that uses `export {}` (making it a module) must place global augmentations inside `declare global {}`. Without the augmentation block, the type is scoped to the module and cannot be used without explicit import.
+
+---
+
+### Issue Encountered: Repetitive Deploy Shell Commands
+
+**What happened:** During the deployment step, `tsc` was not on the system PATH. `npm run build` (which calls `tsc && vite build`) failed immediately. This required a manual `npm install` first, then a rebuild. The deploy itself required constructing a throwaway git repo inside `dist/`:
+
+```bash
+cd dist
+git init
+git add -A
+git commit -m "Deploy"
+git push -f https://token@github.com/xunema/ce-shipgen.git HEAD:gh-pages
+```
+
+This is fragile for three reasons: (1) the environment may not have the right tools on PATH, (2) there is no gate — a failed build could still push a broken `dist/`, and (3) the process must be manually repeated every milestone.
+
+**Fix:** GitHub Actions CI/CD pipeline (Strategy B — see below).
+
+---
+
+### Test Plan Analysis (M2.5)
+
+At the end of M2.5, the verification checklist had 10 manual tests covering four areas:
+
+**Area 1 — Auto-Save (FR-022)**
+Two tests verify the remove-the-Save-button contract. The first confirms table edits save immediately with a toast and no Save button visible. The second confirms JSON view still shows "Apply JSON" — guarding against accidentally hiding it in both modes. The critical edge case: the `autoSaved` state and timer ref must clear correctly on unmount (tested by navigating away mid-toast).
+
+**Area 2 — Snapshots (FR-024)**
+Six tests cover the full snapshot lifecycle. The most complex is Load → remount: after calling `onSnapshotLoad()`, the parent increments `snapshotVersion`, which changes the `key` on `<JsonTableEditor>`, forcing a full React remount. The tester must re-select a table to confirm the remounted editor reads from the newly written localStorage. The rename test has an important edge case: Escape must cancel without committing. The Reset All test must verify localStorage directly — ships (`ce_shipgen_ships_*`) must remain untouched.
+
+**Area 3 — Network Status (FR-021)**
+One test: DevTools → Network → Offline, confirm amber badge appears without page reload, confirm it disappears on reconnect. This exercises the `online`/`offline` event listener cleanup (useEffect return function).
+
+**Area 4 — PWA Install (FR-021)**
+One test that must run against the live HTTPS URL (not localhost). The `beforeinstallprompt` event only fires when Chrome's installability criteria are fully met, which requires HTTPS + valid manifest + active service worker. Cannot be automated headlessly.
+
+---
+
+### Three-Strategy Optimization Analysis
+
+After M2.5 implementation, three strategies were identified to improve the development pipeline, ranked by ROI and challenge learned:
+
+---
+
+**Strategy A — Playwright E2E Tests**
+
+Automate the 10-item manual checklist. Playwright can simulate offline (`context.setOffline(true)`), read localStorage (`page.evaluate`), and intercept downloads. The PWA install test stays manual.
+
+*Ranked 3rd.* Highest setup cost of the three. Most valuable at M3/M4 when ship calculation logic introduces subtle stateful regressions that manual testing will miss. The right time to introduce Playwright is after CI/CD is stable, so tests run in the pipeline automatically.
+
+---
+
+**Strategy B — GitHub Actions CI/CD Pipeline**
+
+Automate `npm ci → npm run build → push dist/ to gh-pages` on every push to `main`. PRs get a build-check-only run (no deploy) as a gate before merge.
+
+*Ranked 1st. Implemented immediately in Session 5.*
+
+The manual deploy process broke on the first attempt of this session. The fragility was demonstrated concretely — not hypothetically. A 30-line YAML file eliminates the problem permanently and delivers immediate ROI on the very next commit.
+
+---
+
+**Strategy C — Pre-commit Type + Lint Gate (husky)**
+
+Run `tsc --noEmit` before each commit via a husky pre-commit hook. Catches type errors like the `pwa.d.ts` issue at the moment of authorship rather than at CI run time.
+
+*Ranked 2nd.* With Strategy B in place, type errors are already caught before reaching `gh-pages`. The pre-commit hook adds local-machine protection — catching errors before a push triggers CI. Useful when the team grows or when `tsc` compilation becomes slow enough that waiting for CI feedback is frustrating. Deferred to M3.
+
+---
+
+### FR-025: CI/CD Pipeline Implementation
+
+**File:** `.github/workflows/deploy.yml`
+
+**Pipeline:**
+```
+push/PR to main
+  → checkout@v4
+  → setup-node@v4 (Node 20, npm cache)
+  → npm ci
+  → npm run build  ← type-check gate (tsc + vite)
+  → [PR: stop here]
+  → peaceiris/actions-gh-pages@v3  ← push dist/ to gh-pages
+```
+
+**Key decisions:**
+
+1. **`npm ci` not `npm install`** — `ci` uses `package-lock.json` exactly, giving reproducible installs. `npm install` can update the lockfile silently.
+
+2. **`npm run build` as the gate** — this runs `tsc && vite build`. TypeScript errors fail the build, which fails the CI job, which blocks the deploy. The `pwa.d.ts` type error from this session would have been caught here and prevented a broken deploy.
+
+3. **`if: github.event_name == 'push' && github.ref == 'refs/heads/main'`** — the deploy step is conditional. Pull requests run the build check but do not deploy to `gh-pages`. This prevents feature branches from accidentally overwriting the live site.
+
+4. **`peaceiris/actions-gh-pages@v3`** — handles the `dist/` → `gh-pages` push using `GITHUB_TOKEN` (automatically available, no secrets to configure). The commit message is inherited from the triggering commit for traceability.
+
+5. **`permissions: contents: write`** — required for the action to push to the `gh-pages` branch. Without this, the default read-only token blocks the push.
+
+**Effect on deploy workflow going forward:**
+```
+Before: edit → build locally → npm ci → npm run build → cd dist → git init → git add → git commit → git push -f
+After:  edit → git push origin main
+```
+
+---
+
+### Table of Contents Update
+
+The following session sections now exist in this document:
+1. Day 1: Documentation & Planning
+2. Day 2: Requirements & Architecture
+3. Day 3: Milestone 1 Implementation
+4. Technical Decisions
+5. Issues Encountered & Solutions
+6. File Structure
+7. Next Steps
+8. Session 3: M2 Completion (Settings & JSON Editor)
+9. Session 4: FR-021–024 Requirements & Auto-Save Model
+10. **Session 5: M2.5 Implementation + CI/CD Pipeline (FR-025)** ← current
+
+---
+
+*Session 5 notes written: March 2, 2026*
+*Session 5 duration: ~45 minutes*
+*Files created: 3 (.github/workflows/deploy.yml, src/types/pwa.d.ts, src/components/settings/SettingsSnapshots.tsx)*
+*Files modified: 4 (JsonTableEditor.tsx, App.tsx, StartupScreen.tsx, SettingsScreen.tsx)*
+*Docs updated: PRD.md (FR-025, Strategy B/C deferred, milestone table), PROJECT_NOTES.md (this session)*
+*Next milestone: M3 — 19-step Ship Design Wizard, BOQ calculations, real-time validation*
+
+---
+
+## Session 5 Wrap-Up — M2.6 Blocker Identified
+
+**Date:** March 2, 2026 (end of session)
+
+### What Was Found
+
+End-of-session review identified two M2.5 features that are **implemented but not verified working** in the live deployed app:
+
+**1. Standalone "Local" indicator (FR-021b)**
+The "Installed" badge in the header (`isStandalone` state in `App.tsx`) reads from `window.matchMedia('(display-mode: standalone)')` and `navigator.standalone`. This logic is correct in code but has not been tested against the actual installed PWA. The standalone display mode only activates when the app is launched from a home screen / app shortcut — not from the browser address bar even if installed.
+
+**2. Settings Snapshots (FR-024)**
+The `SettingsSnapshots` component is implemented but was not manually tested end-to-end in the browser. The async save flow (fetching default table data for uncustomised tables) and the `key={snapshotVersion}` remount chain have not been confirmed working outside of a build-pass check.
+
+### Why This Matters Before M3
+
+M3 introduces the 19-step ship design wizard with real-time calculations. The snapshot system is meant to let users preserve their table configurations before experimenting with ship designs. If snapshots are broken, users have no recovery path when the calculation engine reads from a corrupted or unexpected table state.
+
+The standalone indicator is lower priority but is part of the FR-021 acceptance criteria that M2.5 claimed to complete.
+
+### M2.6 Checklist (Next Session Start)
+
+Before writing any M3 code:
+- [ ] Open https://xunema.github.io/ce-shipgen/ in Chrome
+- [ ] Click install (or address bar install icon) → launch from app shortcut
+- [ ] Confirm "Installed" green badge appears in header
+- [ ] Confirm badge absent in browser tab
+- [ ] Settings → save a snapshot → reload page → confirm it persists
+- [ ] Load that snapshot → re-select a table → confirm data matches snapshot
+- [ ] Fix anything broken → push → CI deploys → re-verify
+- [ ] Only then: open M3
+
+---
+
+*Session 5 wrap-up written: March 2, 2026*
+*M2.5 status revised: ⚠️ Needs Verification*
+*M2.6 blocker logged in PRD §11.8 and milestone table*

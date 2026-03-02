@@ -887,7 +887,90 @@ Preset object schema:
 
 ---
 
-### 11.5 Updated Risk Register
+### 11.5 CI/CD Pipeline — Strategy B (FR-025)
+
+**Priority:** High
+**Added:** March 2, 2026 (Session 5)
+**Status:** ✅ Implemented
+
+**Problem Statement:**
+Every deployment required a manual sequence: `npm install` (which could fail if `tsc` was not on PATH), `npm run build`, constructing a throwaway git repo inside `dist/`, and force-pushing to `gh-pages`. This was fragile, error-prone, and added friction to every milestone. In Session 5 this process broke immediately — `tsc` was not on the system PATH and `npm install` had to be run manually before the build could proceed.
+
+**Root Cause:**
+No automated pipeline. Every deploy was a manual 4-step shell process with no gate on build success. The deploy could proceed even if type checking failed.
+
+**Solution: GitHub Actions Workflow**
+File: `.github/workflows/deploy.yml`
+
+```yaml
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+```
+
+**Pipeline stages:**
+1. `actions/checkout@v4` — clean checkout of `main`
+2. `actions/setup-node@v4` (Node 20, npm cache) — consistent, hermetic environment
+3. `npm ci` — reproducible install from `package-lock.json`
+4. `npm run build` — runs `tsc && vite build` (type-check is the gate)
+5. `peaceiris/actions-gh-pages@v3` — pushes `dist/` to `gh-pages` (deploy only on push to `main`, not on PRs)
+
+**PR behavior:** PRs trigger steps 1–4 only (build check, no deploy). Merge to `main` triggers all 5 steps including deploy. This means every PR is validated before it can break the live site.
+
+**Benefits delivered:**
+- Zero manual deploy steps after `git push`
+- Build failures block deploy — type errors can no longer slip through
+- PRs are validated in CI before merge
+- Consistent Node environment — no PATH issues across machines
+- Commit message from `main` propagated to the `gh-pages` deploy commit for traceability
+
+**Relationship to Optimization Strategies (Session 5 analysis):**
+This was identified as the highest-ROI first step from the three-strategy optimization analysis. Strategy A (Playwright E2E) and Strategy C (pre-commit gate) are deferred to later milestones and documented below as upcoming work.
+
+**Acceptance Criteria:**
+- [x] Push to `main` automatically triggers build and deploy
+- [x] PRs run `npm run build` as a gate — type errors block merge
+- [x] Deploy only on push to `main`, not on PRs
+- [x] `dist/` pushed to `gh-pages` with commit message traceability
+- [x] No manual `npm install` or git operations required for deploy
+
+---
+
+### 11.6 Deferred Optimization Strategies (Future Milestones)
+
+**Added:** March 2, 2026 (Session 5)
+
+These strategies were analyzed and ranked in Session 5. Strategy B (CI/CD) was implemented immediately. Strategies A and C are deferred but documented here to preserve the rationale.
+
+---
+
+**Strategy A — Playwright E2E Tests (Deferred: M3 or M4)**
+
+Automate the manual test plan (currently 10 manual checklist items) with Playwright. Each item maps to a `test()` block. Key capabilities needed:
+- `context.setOffline(true)` — simulate offline badge test
+- `page.evaluate(() => localStorage.getItem(...))` — verify auto-save persistence
+- File download interception — verify snapshot export
+- The PWA install prompt test stays manual (`beforeinstallprompt` cannot be reliably simulated in headless browsers)
+
+**Why deferred:** Playwright setup has the highest upfront investment of the three strategies. The manual test plan is manageable at current scale. Playwright becomes critical at M3/M4 when stateful ship design calculations are added — the risk of silent regressions in the calculation engine is where automated E2E tests pay off most.
+
+**Integration point:** Once Strategy B (CI/CD) is stable, add a `test` job to `deploy.yml` that runs `npx playwright test` before the deploy step.
+
+---
+
+**Strategy C — Pre-commit Type + Lint Gate (Deferred: M3)**
+
+Add `husky` + a pre-commit hook running `tsc --noEmit`. The `pwa.d.ts` structural bug in Session 5 (`BeforeInstallPromptEvent` declared outside `declare global {}`) was caught at build time after the fact. A pre-commit hook would catch it at the moment of authorship.
+
+**Why deferred:** With Strategy B in place, the CI build now catches type errors before they reach `gh-pages`. The pre-commit hook adds redundant protection for solo development. It becomes valuable when a second contributor joins or when the codebase grows large enough that `tsc` takes >5 seconds (making CI feedback slow enough to be annoying).
+
+**Implementation:** `husky install` + `.husky/pre-commit` running `npm run build -- --noEmit` (or a dedicated `typecheck` script). Pair with `eslint` for unused-variable enforcement.
+
+---
+
+### 11.7 Updated Risk Register
 
 | Risk | Likelihood | Impact | Mitigation | Status |
 |------|------------|--------|------------|--------|
@@ -910,12 +993,40 @@ Preset object schema:
 |-----------|-------|--------|
 | M1: UI Layout & Tiling | Layout, tiles, focus mode, PWA | ✅ Complete |
 | M2: Settings & Data Tables | JSON + table editors, all 13 tables, rule toggles | ✅ Complete |
-| M2.5: Install UX & Settings System | FR-021 (install), FR-022 (auto-save + reset), FR-023 (security), FR-024 (snapshots) | 🎯 Next |
-| M3: Ship Generation | 19-step wizard, BOQ, real-time calculations | ⏳ Pending |
+| M2.5: Install UX & Settings System | FR-021 (install), FR-022 (auto-save + reset), FR-023 (security), FR-024 (snapshots), FR-025 (CI/CD) | ⚠️ Needs Verification |
+| M2.6: Local Signal & Snapshot Fix | FR-021b (standalone indicator confirmed working), FR-024 (snapshots confirmed working in browser) | 🎯 Next — required before M3 |
+| M3: Ship Generation | 19-step wizard, BOQ, real-time calculations | ⏳ Blocked on M2.6 |
 | M4: Persistence & Export | Ship library, JSON/CSV/text/print export | ⏳ Pending |
 
 ---
 
+### 11.8 M2.6 Blocker — Local Signal & Snapshots Verification Required
+
+**Added:** March 2, 2026 (Session 5 wrap-up)
+**Priority:** Critical — must resolve before M3 begins
+
+**Problem Statement:**
+End-of-session manual testing revealed that two M2.5 features are not confirmed working in the live deployed app:
+
+1. **FR-021b — Standalone / "Installed" indicator** ("Local signal")
+   - The header badge showing "Installed" (green dot) when the app is running as a standalone PWA has not been verified in the live environment
+   - The `window.matchMedia('(display-mode: standalone)')` and `navigator.standalone` detection is implemented in code but has not been tested against the actual installed PWA on a real device or Chrome's install flow
+   - Risk: the condition may never be true in practice if the app is not correctly registered as installable, or if the manifest/service worker configuration prevents the standalone display mode from activating
+
+2. **FR-024 — Settings Snapshots**
+   - The snapshots component is implemented but has not been verified working end-to-end in the browser
+   - Specific concerns: async fetch of default table data during snapshot save, the `key={snapshotVersion}` remount triggering correctly after load, localStorage reads/writes at the `ce_shipgen_presets` key
+
+**Required before M3:**
+- [ ] Install the app from https://xunema.github.io/ce-shipgen/ on Chrome desktop
+- [ ] Confirm "Installed" badge appears in header when running in standalone mode
+- [ ] Confirm badge is absent when running in browser tab
+- [ ] Save a snapshot, reload the page, confirm snapshot persists
+- [ ] Load a snapshot, re-select a table, confirm data reflects the loaded snapshot
+- [ ] If either feature is broken: diagnose, fix, redeploy, re-verify before opening M3
+
+---
+
 **PRD Status:** LIVING DOCUMENT — updated per session
-**Last updated:** March 2, 2026 (Session 4)
-**Next implementation target:** M2.5 — Auto-save, Settings Snapshots, Install UX, Security
+**Last updated:** March 2, 2026 (Session 5 wrap-up)
+**Next implementation target:** M2.6 — Verify and fix Local signal (FR-021b) and Snapshots (FR-024) before M3
