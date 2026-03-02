@@ -492,6 +492,188 @@ Key entities:
 
 ---
 
-**PRD Status:** APPROVED FOR IMPLEMENTATION
+---
 
-Next: Create Agent Implementation Guide (iterative development instructions)
+## 11. ADDENDUM — March 2, 2026 (Session 3 Requirements)
+
+### 11.1 PWA Install Prompt & Install-State Indicator (FR-021)
+
+**Priority:** High
+**Trigger:** User confirmed all 13 data tables are now editable and functional. Next priority is guiding users to install the app locally so they have a personal working copy.
+
+**Problem Statement:**
+Users visiting the web version have no clear signal that the app can be saved to their desktop/home screen, nor any indication of which mode they are currently running in (web vs. installed PWA). Without this, users may not realise they can work offline with their own customised tables.
+
+**Requirements:**
+
+**FR-021a: Install Prompt**
+- Detect PWA installability via the `beforeinstallprompt` event (Chrome/Edge/Android)
+- On the Startup screen, show a prominent "Install App" button or banner when the app is installable
+- On iOS (Safari), show a manual instruction overlay: "Tap Share → Add to Home Screen"
+- After install, suppress the prompt (do not show again)
+- Store `install_prompted` flag in localStorage
+
+**FR-021b: Running-Mode Indicator**
+- Detect installed/standalone mode via:
+  - `window.matchMedia('(display-mode: standalone)').matches`
+  - `window.navigator.standalone === true` (iOS fallback)
+- When running in **standalone (installed) mode**: show a persistent badge in the app header — e.g., a green dot or "Installed" chip — so users know they are on their local copy
+- When running in **web/browser mode**: show a subtle "Install for offline use" link in the header or footer
+- The indicator must be visible from all screens (Design, Library, Settings)
+
+**FR-021c: Offline Status**
+- Display a status indicator when the device is offline (use `navigator.onLine` + `online`/`offline` events)
+- Offline: amber indicator "Offline — using local data"
+- Online: no indicator (default state)
+
+**Acceptance Criteria:**
+- [ ] Install button appears on Startup screen when browser supports install
+- [ ] iOS users see manual install instructions
+- [ ] Header shows "Installed" badge when in standalone mode
+- [ ] Offline indicator appears/disappears correctly
+- [ ] No install prompt shown if already installed
+
+---
+
+### 11.2 Local vs. Web Version Workflow (FR-022)
+
+**Priority:** High
+**Problem Statement:**
+The user needs to test the experience of "saving" a personal version (with custom tables/rules) vs. reverting back to the canonical web defaults. The app already separates defaults (JSON files in `public/data/`) from user customisations (localStorage), but there is no UX to make this explicit or manageable.
+
+**Data Architecture (existing, correct):**
+
+| Layer | Storage | Contains | Resettable? |
+|-------|---------|----------|-------------|
+| Canonical defaults | `public/data/*.json` (shipped files) | Rule tables as authored | No (read-only) |
+| User customisations | `localStorage` (`ce_shipgen_table_*`) | Edited table data | Yes — "Reset to Default" |
+| Rule preferences | `localStorage` (`ce_shipgen_rules`) | CE/Mneme/Custom toggles | Yes |
+| Ship library | `localStorage` / IndexedDB | Saved ship designs | No — user data, never auto-reset |
+
+**Requirements:**
+
+**FR-022a: "My Version" vs "Web Version" concept**
+- Treat "web version" as the canonical default state (all localStorage customisations absent)
+- Treat "installed/my version" as the user's working copy with their customisations
+- These are not separate codebases — same PWA, different localStorage state
+
+**FR-022b: Reset Settings to Web Defaults**
+- In Settings → Data Management section, add a "Reset All Tables to Defaults" button
+- This clears all `ce_shipgen_table_*` keys and `ce_shipgen_rules` from localStorage
+- **Does NOT touch ship library data** (IndexedDB / ship design keys)
+- Shows confirmation dialog: "This will reset all custom tables and rules. Your saved ships are not affected."
+- After reset, all tables reload from `public/data/*.json` (the web defaults)
+
+**FR-022c: Export My Version**
+- Add "Export My Settings" in Settings → Data Management
+- Exports all current localStorage table customisations as a single JSON bundle
+- Format: `{ "version": "1.0", "exported": "<timestamp>", "tables": { "ship_hulls": [...], ... }, "rules": {...} }`
+- User can share this file to replicate their setup on another device
+
+**FR-022d: Import Settings Bundle**
+- Add "Import Settings" button accepting the export format above
+- Validates schema before applying
+- Does not overwrite ship library
+
+**Acceptance Criteria:**
+- [ ] "Reset All Tables to Defaults" works without touching ship library
+- [ ] "Export My Settings" produces valid importable JSON
+- [ ] "Import Settings" validates and applies cleanly
+- [ ] Installed-mode users can distinguish their customised state from defaults
+
+---
+
+### 11.3 Input Security — Editable Tables (FR-023)
+
+**Priority:** High
+**Trigger:** When the app is made public, malicious actors may attempt to inject harmful content via the editable table fields. The following requirements govern how user-supplied data is handled.
+
+**Threat Model:**
+
+| Threat | Vector | Risk Level | Notes |
+|--------|--------|------------|-------|
+| Stored XSS | Inject `<script>` or event handlers into table string fields | Low (mitigated by React) | React renders text nodes, not HTML, so `String(value)` in JSX is safe |
+| HTML injection via `dangerouslySetInnerHTML` | Any future use of `innerHTML` with table data | **High if introduced** | Currently not used — must never be introduced with table data |
+| Prototype pollution via JSON.parse | `{"__proto__": {"isAdmin": true}}` in imported JSON | Low (modern JS engines block this) | Use `Object.create(null)` pattern for sensitive parsing |
+| Schema confusion / type mismatch | String in numeric field causes NaN in calculations | Medium | Currently no schema validation — calculation engine will inherit garbage |
+| Malicious JSON import shared between users | User A crafts a JSON file, shares with User B who imports it | Medium | Content is rendered safely by React, but could break calculations |
+| localStorage tampering (browser console) | User directly edits localStorage keys | Low (self-inflicted) | Out of scope — local storage is the user's own environment |
+
+**Current Safety Status:**
+- ✅ React JSX text rendering is XSS-safe by default — `{String(value)}` produces text nodes
+- ✅ `title={String(value)}` attribute values are escaped by React
+- ✅ No `eval()`, `Function()`, or `dangerouslySetInnerHTML` used with table data
+- ⚠️ No schema validation on import — invalid types reach the calculation engine
+- ⚠️ No string sanitization — HTML tags in fields are harmless now but risky if future code ever uses innerHTML
+- ⚠️ No max-length enforcement on string fields
+
+**Requirements:**
+
+**FR-023a: Schema Validation on Import**
+- When importing a JSON table, validate each row against the expected schema for that table
+- Check: required fields present, numeric fields are numbers, string fields are strings
+- Reject import if >10% of rows fail validation
+- Show specific validation errors to the user before accepting
+
+**FR-023b: String Sanitization on Save**
+- Before saving to localStorage, strip HTML tags from all string fields
+- Simple implementation: `value.replace(/<[^>]*>/g, '')` is sufficient given React's rendering model
+- This prevents any future code from accidentally rendering injected HTML
+
+**FR-023c: Type Coercion on Load**
+- When reading table data from localStorage, coerce values to expected types
+- Numeric fields: `Number(value)` with NaN fallback to 0
+- String fields: `String(value).slice(0, 500)` (max 500 chars)
+- Boolean fields: explicit true/false check
+
+**FR-023d: No `dangerouslySetInnerHTML` with Table Data (Architectural Rule)**
+- Document as a hard architectural constraint: table field values must NEVER be passed to `dangerouslySetInnerHTML`
+- Any future markdown rendering in ship output must use a sanitized renderer (e.g., DOMPurify + marked)
+
+**FR-023e: Content Security Policy (Future)**
+- GitHub Pages does not support custom HTTP headers, so CSP cannot be set via headers
+- When migrating off GitHub Pages (Netlify/Vercel/self-hosted), add:
+  ```
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'
+  ```
+- `unsafe-inline` needed only for Tailwind's inline styles — can be removed with stricter setup
+
+**Acceptance Criteria:**
+- [ ] Import rejects JSON with invalid schema and shows clear error
+- [ ] String fields are stripped of HTML tags before save
+- [ ] Numeric fields are coerced with NaN fallback on load
+- [ ] No `dangerouslySetInnerHTML` introduced in any table-data code path
+
+---
+
+### 11.4 Updated Risk Register
+
+| Risk | Likelihood | Impact | Mitigation | Status |
+|------|------------|--------|------------|--------|
+| Complex calculation errors | Medium | High | Extensive unit tests | ⏳ Pending |
+| Performance on low-end devices | Medium | Medium | Optimize bundle, lazy loading | ⏳ Pending |
+| Browser compatibility issues | Low | Medium | Feature detection, graceful degradation | ⏳ Pending |
+| Data migration complexity | Low | Medium | Version tagging, migration scripts | ⏳ Pending |
+| Scope creep | High | Medium | Strict MVP definition | ⏳ Ongoing |
+| XSS via table fields | Low | High | React text rendering + sanitization on save | ⏳ FR-023 |
+| Schema corruption breaking calculations | Medium | High | Schema validation on import + type coercion on load | ⏳ FR-023 |
+| Users unaware app is installable | High | Medium | Install prompt + install-state indicator | ⏳ FR-021 |
+| Users lose customisations on device switch | Medium | Medium | Export/Import settings bundle | ⏳ FR-022 |
+
+---
+
+### 11.5 Updated Milestone Plan
+
+| Milestone | Scope | Status |
+|-----------|-------|--------|
+| M1: UI Layout & Tiling | Layout, tiles, focus mode, PWA | ✅ Complete |
+| M2: Settings & Data Tables | JSON + table editors, all 13 tables, rule toggles | ✅ Complete |
+| M2.5: Install UX & Security | FR-021, FR-022, FR-023 | 🎯 Next |
+| M3: Ship Generation | 19-step wizard, BOQ, real-time calculations | ⏳ Pending |
+| M4: Persistence & Export | Ship library, JSON/CSV/text/print export | ⏳ Pending |
+
+---
+
+**PRD Status:** LIVING DOCUMENT — updated per session
+**Last updated:** March 2, 2026 (Session 3)
+**Next implementation target:** M2.5 — Install UX & Security hardening

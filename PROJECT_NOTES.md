@@ -1122,3 +1122,169 @@ git checkout main
 *Files modified: 60+*
 *Commits: 15+*
 *Deployments: 12+*
+
+---
+
+## Session 3 — March 2, 2026 (Requirements & Security Analysis)
+
+**Timestamp:** March 2, 2026 (~19:30 UTC)
+**Agent:** Claude Sonnet 4.6
+**Context:** User confirmed all 13 data tables are visible and editable. Session focused on new requirements for public launch readiness — no code was changed, only PRD and notes updated.
+
+---
+
+### New Requirements Identified
+
+#### Problem 1: No Signal That App Can Be Installed
+
+**User Report:** "when someone uses this — they should first 'Save this' to their desktop and there is a signal or symbol saying they are running off their desktop"
+
+**What this means technically:**
+This is the PWA install flow. The app already has a service worker and manifest (set up in Milestone 1), so it is technically installable. However:
+- There is no install prompt shown to the user anywhere in the UI
+- Once installed, there is no visual indicator that the user is running the installed/standalone version vs. the browser tab version
+- There is no offline status indicator
+
+**Why this matters:**
+The entire "local version" concept depends on users actually installing the app. Without an install prompt, most users will never discover the install option (it's buried in the browser menu). Without the installed-mode indicator, users won't know which version they're running, which makes the "local vs web" distinction meaningless to them.
+
+**Detection method:**
+```javascript
+// Is the app installable? (Chrome/Edge/Android)
+window.addEventListener('beforeinstallprompt', (e) => { /* show install button */ })
+
+// Is the app currently running as installed/standalone?
+window.matchMedia('(display-mode: standalone)').matches  // Chrome/Edge/Android
+window.navigator.standalone === true                      // iOS Safari
+```
+
+**Proposed UX:**
+- Startup screen: "Install App" button when `beforeinstallprompt` fires
+- iOS: "How to install" link showing manual steps (Share → Add to Home Screen)
+- Header (all screens): green "Installed" badge when in standalone mode
+- Header (all screens): subtle "Install" link when in browser mode
+- Header (all screens): amber dot when offline
+
+**Added to PRD as:** FR-021
+
+---
+
+#### Problem 2: No Clear "Local vs Web" Version Workflow
+
+**User Report:** "I will test this saving to a local version as well as 'reverting' back to the web version"
+
+**What "local version" and "web version" mean in a PWA:**
+Unlike a native app with a separate installer, a PWA has one codebase. The distinction is:
+
+| "Web version" | "My version" / "Local version" |
+|---------------|-------------------------------|
+| No localStorage customisations | Has user-edited tables in localStorage |
+| Fetches data from `public/data/*.json` | Reads from localStorage first, falls back to `public/data/` |
+| Canonical defaults | Personal customisations |
+| Running in browser tab | Running as installed PWA (typically) |
+
+**"Reverting to web version" means:** clearing all localStorage settings (tables + rules) so the app reads from the canonical JSON files again. Ship designs must NOT be cleared — only config/settings.
+
+**Current localStorage key structure:**
+```
+ce_shipgen_table_ship_hulls      ← table customisation (resettable)
+ce_shipgen_table_ship_drives     ← table customisation (resettable)
+... (one per table × 13)
+ce_shipgen_rules                  ← rule preferences (resettable)
+ce_shipgen_ships_*                ← ship designs (must NOT be reset)
+```
+
+**Missing features for this workflow:**
+1. "Reset All Tables to Defaults" button — clears only `ce_shipgen_table_*` keys
+2. "Export My Settings" — bundles all table customisations + rules into a portable JSON
+3. "Import Settings" — restores a settings bundle from file
+4. Per-table "Reset" already exists (implemented in Milestone 2) ✅
+
+**Added to PRD as:** FR-022
+
+---
+
+#### Problem 3: Security — Injection Risk in Editable Tables
+
+**User Report:** "once I make this public malicious actors will try to inject things into the editable tables"
+
+**Threat Assessment:**
+
+The editable tables accept free-text string input in any field. The concern is that injected content could harm other users — but this is a **local-only app**. There is no server, no database, no other users' data to corrupt. Each user has their own localStorage. The real risks are:
+
+**Risk A: XSS via table content rendering**
+- **Current status: LOW RISK**
+- React renders all text via text nodes, not innerHTML. `{String(value)}` in JSX is inherently safe.
+- The `title={String(value)}` attribute is escaped by React.
+- There is currently no `dangerouslySetInnerHTML` anywhere near table data.
+- **Residual risk:** If a future developer adds markdown rendering or innerHTML to ship output and forgets to sanitize, injected HTML in table fields could execute.
+
+**Risk B: Schema corruption breaking the calculation engine**
+- **Current status: MEDIUM RISK**
+- There is no schema validation when importing JSON files.
+- A user could import a file with strings where numbers are expected (e.g., `"tons": "fifteen"` instead of `"tons": 15`).
+- This would cause NaN in calculations, which would silently produce wrong ship designs.
+- This affects the user themselves — not other users — but it could corrupt saved ships.
+
+**Risk C: Malicious JSON file shared between users**
+- **Current status: MEDIUM RISK (planned, not current)**
+- The Export/Import feature (FR-022c) will allow JSON bundles to be shared.
+- A malicious actor could craft a JSON file that, when imported, populates table fields with harmful content.
+- Since the app uses React, HTML injection is still blocked. But type confusion could corrupt calculations.
+- **The real attack here:** craft a "free trader" ship design that looks correct but has wrong numbers (e.g., jump drive tons = 0.001) — a game rules exploit, not a code exploit.
+
+**Risk D: Prototype pollution**
+- **Current status: VERY LOW RISK**
+- Modern JS engines (V8, SpiderMonkey) block `__proto__` assignment via `JSON.parse`
+- The code uses spread operators (`{...row}`) which do not copy prototype chains
+- No risk in current implementation
+
+**What is NOT a risk (clarification):**
+- Server-side injection: there is no server — no SQL injection, no command injection possible
+- Other users' data: each user has isolated localStorage — one user's injected data cannot reach another user
+- Cookie theft: the app uses no cookies
+
+**Recommended fixes (in priority order):**
+1. **String sanitization before save** — strip HTML tags from string fields: `value.replace(/<[^>]*>/g, '')`. This future-proofs against any accidental innerHTML use.
+2. **Schema validation on import** — validate each imported row against expected field types. Reject or coerce bad values.
+3. **Type coercion on load** — when reading from localStorage, coerce to expected types with safe fallbacks.
+4. **Architectural rule** — document that `dangerouslySetInnerHTML` must never be used with table field values.
+5. **CSP headers (future)** — not possible on GitHub Pages, but add when migrating to Netlify/Vercel.
+
+**Added to PRD as:** FR-023
+
+---
+
+### Key Insights for Future Agents
+
+**On the "local vs web" distinction:**
+Do not try to create separate builds or separate deployments. The same PWA serves both purposes. The entire distinction is whether `localStorage` has customisations. The canonical data always lives in `public/data/*.json` and is never modified. LocalStorage is the user's personal layer on top.
+
+**On security scope:**
+This is a client-side-only app with no server, no multi-user data, and no authentication. The attack surface is narrow. The most realistic attacks are:
+1. A user corrupting their own data by importing a malformed file (fixable with validation)
+2. Future developer mistakes introducing innerHTML with unsanitized data (prevent architecturally)
+
+Do not over-engineer security for threats that don't apply to a local PWA. Focus on schema validation and type safety, not server-side concerns.
+
+**On the install prompt:**
+The `beforeinstallprompt` event is only fired in Chrome, Edge, and some Android browsers. Firefox and Safari require different approaches. iOS Safari requires completely manual steps (no programmatic prompt possible). Any install UX implementation must handle all three cases gracefully.
+
+---
+
+### Files Changed This Session
+
+None — this was a planning and documentation session only.
+
+**PRD changes:** Added sections 11.1 through 11.5 (FR-021, FR-022, FR-023, updated risk register, updated milestone plan)
+
+**Commits:**
+- `main` branch: `ca539e9b` — "docs: add Session 2 bug analysis and fix notes"
+- PRD update committed with this session's notes
+
+---
+
+*Session 3 notes written: March 2, 2026*
+*Session 3 duration: ~20 minutes*
+*Files changed: 2 (PRD.md, PROJECT_NOTES.md — documentation only)*
+*Next milestone: M2.5 — Install UX & Security hardening (FR-021, FR-022, FR-023)*
