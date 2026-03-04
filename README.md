@@ -88,11 +88,13 @@ Licensed under **GPL v3** - you can:
 
 ## 📚 Documentation
 
-| Document | Purpose |
-|----------|---------|
-| [PRD.md](./PRD.md) | Product Requirements Document - 20 FRs, user stories, technical specs |
-| [PROJECT_NOTES.md](./PROJECT_NOTES.md) | Development timelog, assumptions, problems encountered, current status |
-| [CE-Chapter-8-Ship-Design-and-Construction.md](./CE-Chapter-8-Ship-Design-and-Construction.md) | Source rules from Cepheus Engine SRD |
+| Document | Purpose | Status |
+|----------|---------|--------|
+| [PRD.md](./PRD.md) | Product Requirements Document — 20 FRs, user stories, technical specs | ✅ Current |
+| [PROJECT_NOTES.md](./PROJECT_NOTES.md) | Dev timelog, assumptions, problems, GI7B UI Standard definition | ✅ Current |
+| [CE-Chapter-8-Ship-Design-and-Construction.md](./CE-Chapter-8-Ship-Design-and-Construction.md) | Knowledge base — Cepheus Engine SRD Chapter 8 (ship design rules) | ✅ Reference |
+
+> **CE ShipGen is the canonical reference implementation of the [GI7B Generator UI Standard](./PROJECT_NOTES.md#gi7b-generator-ui-standard).** All GI7B generators (CharacterGen, WorldGen) follow the same navigation tree, tile system, and settings structure documented in PROJECT_NOTES.md.
 
 ---
 

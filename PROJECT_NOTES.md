@@ -1,22 +1,110 @@
 # CE ShipGen Creation Notes - March 2, 2026
 
-**Project:** CE ShipGen (Cepheus Engine Ship Generator)  
-**Date:** March 2, 2026  
-**Status:** Milestone 2 Complete - Settings with JSON & Table Editor  
-**Deployed URL:** https://xunema.github.io/ce-shipgen/  
+**Project:** CE ShipGen (Cepheus Engine Ship Generator)
+**Date:** March 2, 2026
+**Status:** Milestone 2 Complete - Settings with JSON & Table Editor
+**Deployed URL:** https://xunema.github.io/ce-shipgen/
 
 ---
 
 ## Table of Contents
 
 1. [Project Overview](#project-overview)
-2. [Day 1: Documentation & Planning](#day-1-documentation--planning)
-3. [Day 2: Requirements & Architecture](#day-2-requirements--architecture)
-4. [Day 3: Milestone 1 Implementation](#day-3-milestone-1-implementation)
-5. [Technical Decisions](#technical-decisions)
-6. [Issues Encountered & Solutions](#issues-encountered--solutions)
-7. [File Structure](#file-structure)
-8. [Next Steps](#next-steps)
+2. [GI7B Generator UI Standard](#gi7b-generator-ui-standard)
+3. [Day 1: Documentation & Planning](#day-1-documentation--planning)
+4. [Day 2: Requirements & Architecture](#day-2-requirements--architecture)
+5. [Day 3: Milestone 1 Implementation](#day-3-milestone-1-implementation)
+6. [Technical Decisions](#technical-decisions)
+7. [Issues Encountered & Solutions](#issues-encountered--solutions)
+8. [File Structure](#file-structure)
+9. [Next Steps](#next-steps)
+
+---
+
+## GI7B Generator UI Standard
+
+CE ShipGen is the **canonical reference implementation** of the GI7B Generator UI Standard. All GI7B generators (ShipGen, CharacterGen, WorldGen) follow this same navigation tree, layout system, and tile pattern.
+
+### App Navigation Tree
+
+```
+Landing Page  (/)
+│
+├── 🖥️/📱  Layout Toggle  [header — always visible]
+│         Desktop: three-column  (Nav 15% | Tiles 55% | Summary 30%)
+│         Mobile:  single-column vertical stack (collapsible params)
+│
+├── 🌙/☀️  Theme Toggle   [header — always visible]
+│         Night (dark) / Day (light)
+│
+├── ⚙️ Settings  (/settings)
+│   ├── 📄 JSON Tables        (/settings/tables  or  /settings/data)
+│   │      All generation tables — editable, exportable, renamable/versionable per step
+│   ├── 🧩 Mechanics Modules  (/settings/mechanics)
+│   │      Core rules and rule-variant toggles (e.g. CE RAW vs Mneme variant)
+│   ├── 🎲 Generation Options (/settings/options)
+│   │      Presets: "Random Everything", filter constraints, locked values
+│   └── 🔧 Other Settings     (/settings/other)
+│          Theme defaults, layout defaults, version info, PWA install
+│
+├── 📚 Library  (/library)
+│      Vault of all previously generated items — search, filter, export
+│
+└── ✨ Generate Now  (/generate)
+       Main creation flow — tile-based, step-by-step
+```
+
+### Tile System
+
+Each generation step is a **tile** with three states:
+
+| State | Description |
+|-------|-------------|
+| **Collapsed** | Summary label only — shows key value |
+| **Expanded** | Full tile content — inputs, selections, details |
+| **Focused** | Full-screen overlay — click tile header to enter, ESC to exit |
+
+### Layout Modes
+
+| Mode | Columns | Use Case |
+|------|---------|----------|
+| **Desktop** | Three columns: Nav (15%) \| Tiles (55%) \| Summary/Log (30%) | Landscape, tablet-up |
+| **Mobile** | Single column, vertical stack, collapsible params panel | Portrait, small screens |
+
+Toggle is persistent in the header — survives navigation and page reload (stored in localStorage).
+
+### Settings Sections
+
+| Section | Path | Purpose |
+|---------|------|---------|
+| **JSON Tables** | `/settings/tables` | Edit all data tables driving generation. Dual view: JSON / Spreadsheet. Export, import, version. |
+| **Mechanics Modules** | `/settings/mechanics` | Rule variant toggles. CE Rules As Written vs Mneme Variant. Each toggle is discrete and named. |
+| **Generation Options** | `/settings/options` | Named presets. "Random Everything" toggle. Lock/unlock individual fields before generating. |
+| **Other Settings** | `/settings/other` | Theme default, layout default, version display, PWA install prompt, changelog. |
+
+### Tables In Play (Advanced)
+
+Within JSON Tables, users can have multiple versions of each table and select which one is "active" (in play) per generation step. Pattern from CE ShipGen FR-027:
+- **Canonical Tables** — factory defaults, read-only reference
+- **Custom Tables** — user-created (house rules, alternate settings)
+- **Tables In Play** — one active table per category; switchable per session
+- **Export/Import** — share custom tables as JSON files
+
+### Design Principles
+
+1. **Data before code** — all tables live in JSON files; generation logic reads from active table
+2. **Zero code changes to add content** — new careers/tables/rules = new JSON file
+3. **Discrete mechanisms** — every probability, rule toggle, and generation option is named and configurable
+4. **Offline-first** — PWA works without internet after first load
+5. **Universal layout** — same structure on 320px phone and 2560px desktop via layout toggle
+
+### Reference Implementations
+
+| Generator | Repo | Notes |
+|-----------|------|-------|
+| **CE ShipGen** | `github.com/xunema/ce-shipgen` | **Canonical** — this repo |
+| **CE CharacterGen** | `github.com/xunema/cecharactergen` | Follow shipgen pattern |
+| **Mneme World Gen** | `github.com/xunema/mneme-world-generator-pwa` | Follow shipgen pattern |
 
 ---
 
