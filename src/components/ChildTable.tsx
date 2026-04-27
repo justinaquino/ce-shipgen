@@ -6,7 +6,7 @@ interface ChildTableProps {
   title: string;
   items: ChildItem[];
   onChange: (items: ChildItem[]) => void;
-  columns: { key: keyof ChildItem; label: string; width?: string; editable?: boolean; type?: 'text' | 'number' }[];
+  columns: { key: keyof ChildItem; label: string; width?: string; editable?: boolean; type?: 'text' | 'number'; step?: string | number }[];
   renderRow?: (item: ChildItem, index: number, update: (patch: Partial<ChildItem>) => void) => React.ReactNode;
   renderSubTable?: (item: ChildItem, index: number) => React.ReactNode;
   maxItems?: number;
@@ -83,6 +83,7 @@ export function ChildTable({
                         {col.editable ? (
                           <input
                             type={col.type || 'text'}
+                            step={col.step}
                             className="input w-full text-xs py-1"
                             value={item[col.key] as string | number}
                             onChange={(e) => {

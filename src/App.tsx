@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Routes, Route, NavLink } from 'react-router-dom';
+import { Routes, Route, NavLink, Navigate } from 'react-router-dom';
 import { useTableStore } from './store/tableStore';
 import { SettingsProvider, useSettings } from './components/ThemeProvider';
 import { SettingsPanel } from './components/SettingsPanel';
@@ -70,7 +70,8 @@ function AppContent() {
 
       <main className={`max-w-7xl mx-auto px-4 py-6 ${layoutMode === 'phone' ? 'max-w-md' : ''}`}>
         <Routes>
-          <Route path="/" element={<TableManager />} />
+          <Route path="/" element={<Navigate to="/design" replace />} />
+          <Route path="/tables" element={<TableManager />} />
           <Route path="/design" element={<ShipDesigner />} />
           <Route path="/library" element={<ShipLibrary />} />
           <Route path="/variants" element={<VariantGenerator />} />

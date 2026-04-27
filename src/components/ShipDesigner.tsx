@@ -5,6 +5,7 @@ import { BOQView } from './BOQView';
 import { ChildTable } from './ChildTable';
 import { MnemeCombatPanel } from './MnemeCombatPanel';
 import { downloadJson, generateSnapshotName } from '../utils/exportImport';
+import { fmtNumber, fmtCost, fmtTons } from '../utils/formatters';
 import {
   calcArmorTonnage, calcArmorCost, calcJumpFuel, calcPowerFuel,
   getMinPowerPlantLetter, calcStateroomTonnage, calcStateroomCost,
@@ -23,6 +24,94 @@ function generateShipName(hullDtons: number): string {
   const dd = String(now.getDate()).padStart(2, '0');
   const rand = Math.floor(Math.random() * 90) + 10;
   return `${Math.round(hullDtons)}DT-${yy}${mm}${dd}-${rand}`;
+}
+
+function createDefaultShips(addShip: (ship: ShipDesign) => void) {
+  const now = new Date().toISOString();
+  const defaults: ShipDesign[] = [
+    {
+      id: `default-${Date.now()}-1`,
+      name: 'Shuttle',
+      tl: 9,
+      hullCode: '100',
+      hullDtons: 100,
+      configuration: 'Standard',
+      armor: 'None',
+      armorQty: 0,
+      mDrive: 'A',
+      jDrive: '',
+      powerPlant: 'A',
+      bridge: '10-ton Bridge',
+      computer: 'Model 1',
+      software: [],
+      sensors: 'Standard Sensors',
+      staterooms: 0,
+      lowBerths: 0,
+      crew: [],
+      modules: [],
+      weapons: [],
+      cargo: 10,
+      components: [],
+      totalCost: 0,
+      availableDtons: 0,
+      createdAt: now,
+    },
+    {
+      id: `default-${Date.now()}-2`,
+      name: 'Free Trader',
+      tl: 9,
+      hullCode: '200',
+      hullDtons: 200,
+      configuration: 'Standard',
+      armor: 'None',
+      armorQty: 0,
+      mDrive: 'A',
+      jDrive: 'A',
+      powerPlant: 'A',
+      bridge: '10-ton Bridge',
+      computer: 'Model 1',
+      software: [],
+      sensors: 'Standard Sensors',
+      staterooms: 10,
+      lowBerths: 0,
+      crew: [],
+      modules: [],
+      weapons: [],
+      cargo: 50,
+      components: [],
+      totalCost: 0,
+      availableDtons: 0,
+      createdAt: now,
+    },
+    {
+      id: `default-${Date.now()}-3`,
+      name: 'Patrol Cruiser',
+      tl: 9,
+      hullCode: '400',
+      hullDtons: 400,
+      configuration: 'Standard',
+      armor: 'Titanium Steel TL7+',
+      armorQty: 1,
+      mDrive: 'C',
+      jDrive: 'B',
+      powerPlant: 'C',
+      bridge: '20-ton Bridge',
+      computer: 'Model 2',
+      software: [],
+      sensors: 'Standard Sensors',
+      staterooms: 10,
+      lowBerths: 0,
+      crew: [],
+      modules: [],
+      weapons: [],
+      cargo: 20,
+      components: [],
+      totalCost: 0,
+      availableDtons: 0,
+      createdAt: now,
+    },
+  ];
+  defaults.forEach(addShip);
 }
 
 // ─── Component ───
@@ -99,6 +188,19 @@ export function ShipDesigner() {
   const modules = tables.ship_modules?.rows || [];
   const weapons = tables.ship_weapons?.rows || [];
 
+  // ─── Thrust Performance Helper ───
+  const getThrustPerformance = (driveCode: string): number | null => {
+    const perfRows = tables.engine_performance?.rows || [];
+    const driveIndex = drives.findIndex((d: Record<string, unknown>) => String(d['Drive Code']) === driveCode);
+    if (driveIndex < 0 || driveIndex >= perfRows.length) return null;
+    const row = perfRows[driveIndex];
+    const colKey = String(hullDtons);
+    const val = row[colKey];
+    if (val === null || val === undefined || val === '' || val === '--') return null;
+    const num = Number(val);
+    return isNaN(num) ? null : num;
+  };
+
   // ─── Hull Calculations ───
   const selectedHull = hulls.find((h: Record<string, unknown>) => String(h['DTONS']) === hullCode || String(h['Performance Column']) === hullCode);
   const hullDtons = selectedHull ? Number(selectedHull['DTONS']) : 0;
@@ -108,6 +210,46 @@ export function ShipDesigner() {
   useEffect(() => {
     if (hullDtons > 0 && !name) {
       setName(generateShipName(hullDtons));
+    }
+  }, [hullDtons]);
+
+  // Pre-populate default ships on mount if library is empty
+  useEffect(() => {
+    if (ships.length === 0) {
+      createDefaultShips(addShip);
+    }
+  }, []);
+
+  // Auto-generate minimum bridge/cockpit when hull changes and command is empty
+  useEffect(() => {
+    if (hullDtons > 0 && commandRows.length === 0) {
+      if (hullDtons <= 90) {
+        const cockpit = smallCraftBridges[0];
+        if (cockpit) {
+          const dt = Number(cockpit['CONTROLS/ BRIDGE'] || cockpit['DTONS'] || cockpit['Tons'] || 0);
+          const costPerDt = Number(cockpit['COST per DTON'] || cockpit['COST'] || 0);
+          setCommandRows([{
+            id: `cmd-${Date.now()}`,
+            name: String(cockpit['CONTROLS/BRidge'] || cockpit['Bridge Size'] || '1-man Cockpit'),
+            dtons: dt,
+            cost: costPerDt * dt,
+            qty: 1,
+          }]);
+        }
+      } else {
+        const bridge = shipBridges[0];
+        if (bridge) {
+          const dt = Number(bridge['CONTROLS/ BRIDGE'] || bridge['DTONS'] || bridge['Tons'] || 0);
+          const costPerDt = Number(bridge['COST per DTON'] || bridge['COST'] || 0);
+          setCommandRows([{
+            id: `cmd-${Date.now()}`,
+            name: String(bridge['CONTROLS/BRidge'] || bridge['Bridge Size'] || 'Bridge'),
+            dtons: dt,
+            cost: costPerDt * dt,
+            qty: 1,
+          }]);
+        }
+      }
     }
   }, [hullDtons]);
 
@@ -249,7 +391,7 @@ export function ShipDesigner() {
       list.push({ section: 'Crew', module: `Minimum Crew (${crewReqs.totalMinimum})`, dtons: 0, cost: 0 });
       crewReqs.positions.forEach(p => {
         if (p.fullComplement > 0) {
-          list.push({ section: 'Crew', module: `${p.position} ×${p.fullComplement}`, dtons: 0, cost: p.salary * p.fullComplement, notes: `${p.salary.toLocaleString()} Cr/mo each` });
+          list.push({ section: 'Crew', module: `${p.position} ×${p.fullComplement}`, dtons: 0, cost: p.salary * p.fullComplement, notes: `${fmtNumber(p.salary)} Cr/mo each` });
         }
       });
     }
@@ -425,6 +567,29 @@ export function ShipDesigner() {
           </div>
         </div>
 
+        {/* Load from Library */}
+        {ships.length > 0 && (
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-slate-400 whitespace-nowrap">Load from Library:</label>
+            <select
+              className="input flex-1"
+              value=""
+              onChange={(e) => {
+                const ship = ships.find((s) => s.id === e.target.value);
+                if (ship) loadShip(ship);
+                e.target.value = '';
+              }}
+            >
+              <option value="">Select a saved ship...</option>
+              {ships.map((ship) => (
+                <option key={ship.id} value={ship.id}>
+                  {ship.name} ({fmtTons(ship.hullDtons)})
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
         {/* Validation */}
         {validation && (
           <div className={`rounded-lg p-3 text-sm ${validation.valid ? 'bg-green-900/30 border border-green-700' : 'bg-red-900/30 border border-red-700'}`}>
@@ -450,7 +615,7 @@ export function ShipDesigner() {
             <div className="tile-header">
               <span className="font-semibold">Tonnage Budget</span>
               <span className={`text-sm font-medium ${availableDtons < 0 ? 'text-red-400' : 'text-green-400'}`}>
-                {availableDtons.toFixed(1)} DT available / {hullDtons} DT total
+                {fmtTons(availableDtons)} available / {fmtTons(hullDtons)} total
               </span>
             </div>
             <div className="tile-content">
@@ -461,7 +626,7 @@ export function ShipDesigner() {
                 />
               </div>
               <div className="flex justify-between text-xs text-slate-500 mt-1">
-                <span>Allocated: {allocatedTons.toFixed(1)} DT</span>
+                <span>Allocated: {fmtTons(allocatedTons)}</span>
                 <span>{((allocatedTons / hullDtons) * 100).toFixed(1)}%</span>
               </div>
             </div>
@@ -491,7 +656,7 @@ export function ShipDesigner() {
                 <option value="">Select Hull...</option>
                 {hulls.map((h: Record<string, unknown>, i: number) => (
                   <option key={i} value={String(h['DTONS'])}>
-                    {String(h['DTONS'])} DT — {Number(h['COST']).toLocaleString()} Cr
+                    {String(h['DTONS'])} DT — {fmtCost(Number(h['COST']))}
                   </option>
                 ))}
               </select>
@@ -517,7 +682,7 @@ export function ShipDesigner() {
             onChange={setArmorRows}
             columns={[
               { key: 'name', label: 'Type', editable: true, type: 'text' },
-              { key: 'qty', label: 'Layers', editable: true, type: 'number', width: 'w-20' },
+              { key: 'qty', label: 'Layers', editable: true, type: 'number', width: 'w-20', step: '0.1' },
             ]}
             createNewItem={() => ({
               id: `armor-${Date.now()}`,
@@ -553,7 +718,7 @@ export function ShipDesigner() {
               <option value="">Select from table...</option>
               {armors.map((a: Record<string, unknown>, i: number) => (
                 <option key={i} value={String(a['Armor Type'])}>
-                  {String(a['Armor Type'])} — Prot {Number(a['Prot'] || a['Protection'] || 0)} | TL {Number(a['TL'])}
+                  {String(a['Armor Type'])} — Prot {Number(a['Prot'] || a['Protection'] || 0)} | TL{Number(a['TL'])}
                 </option>
               ))}
             </select>
@@ -561,7 +726,7 @@ export function ShipDesigner() {
 
           {armorTons > 0 && (
             <div className="mt-2 text-sm text-slate-400">
-              Total Armor: {armorTons.toFixed(1)} DT | Cost: {armorCost.toLocaleString()} Cr
+              Total Armor: {fmtTons(armorTons)} | Cost: {fmtCost(armorCost)}
             </div>
           )}
         </CollapsibleSection>
@@ -574,15 +739,21 @@ export function ShipDesigner() {
               <label className="block text-sm text-slate-400 mb-1">M-Drive (Thrust)</label>
               <select className="input w-full" value={mDrive} onChange={(e) => setMDrive(e.target.value)}>
                 <option value="">None</option>
-                {validMDrives.map((d: Record<string, unknown>, i: number) => (
-                  <option key={i} value={String(d['Drive Code'])}>
-                    {String(d['Drive Code'])} — {String(d['M-Drive\n Tons'])} DT
-                  </option>
-                ))}
+                {validMDrives.map((d: Record<string, unknown>, i: number) => {
+                  const code = String(d['Drive Code']);
+                  const thrust = getThrustPerformance(code);
+                  const tons = Number(d['M-Drive\n Tons'] || 0);
+                  const cost = Number(d['M-Drive COST'] || 0);
+                  return (
+                    <option key={i} value={code}>
+                      {thrust !== null ? `Thrust-${thrust} — ${code} — ${fmtTons(tons)} — ${fmtCost(cost)}` : `${code} — ${fmtTons(tons)} — ${fmtCost(cost)}`}
+                    </option>
+                  );
+                })}
               </select>
               {mDrive && (
                 <div className="text-xs mt-1 text-slate-500">
-                  {mDriveTons} DT | {mDriveCost.toLocaleString()} Cr
+                  {fmtTons(mDriveTons)} | {fmtCost(mDriveCost)}
                 </div>
               )}
             </div>
@@ -606,13 +777,13 @@ export function ShipDesigner() {
                   <option value="">{jumpParsecs === 0 ? 'N/A' : 'None'}</option>
                   {validJDrives.map((d: Record<string, unknown>, i: number) => (
                     <option key={i} value={String(d['Drive Code'])}>
-                      {String(d['Drive Code'])} — {String(d['J-Drive\n Tons'])} DT
+                      {String(d['Drive Code'])} — {fmtTons(Number(d['J-Drive\n Tons'] || 0))} | {fmtCost(Number(d['J-Drive COST'] || 0))}
                     </option>
                   ))}
                 </select>
                 {jDrive && jumpParsecs > 0 && (
                   <div className="text-xs mt-1 text-slate-500">
-                    {jDriveTons} DT | {jDriveCost.toLocaleString()} Cr
+                    {fmtTons(jDriveTons)} | {fmtCost(jDriveCost)}
                   </div>
                 )}
               </div>
@@ -625,7 +796,7 @@ export function ShipDesigner() {
                 <option value="">None</option>
                 {validPPs.map((d: Record<string, unknown>, i: number) => (
                   <option key={i} value={String(d['Drive Code'])}>
-                    {String(d['Drive Code'])} — {String(d['P-Plant\n Tons'])} DT
+                    {String(d['Drive Code'])} — {fmtTons(Number(d['P-Plant\n Tons'] || 0))} | {fmtCost(Number(d['PP COST'] || 0))}
                   </option>
                 ))}
               </select>
@@ -637,9 +808,14 @@ export function ShipDesigner() {
                   PP ≥ {getMinPowerPlantLetter(mDrive, jDrive)} required
                 </div>
               )}
+              {powerPlant && (
+                <div className="text-xs mt-1 text-blue-400 flex items-center gap-1">
+                  <CheckCircle size={12} /> Qty: 1
+                </div>
+              )}
               {ppTons > 0 && (
                 <div className="text-xs mt-1 text-slate-500">
-                  {ppTons} DT | {ppCost.toLocaleString()} Cr | Fuel/Wk: {ppFuelWk} tons
+                  {fmtTons(ppTons)} | {fmtCost(ppCost)} | Fuel/Wk: {ppFuelWk} tons
                 </div>
               )}
             </div>
@@ -708,11 +884,16 @@ export function ShipDesigner() {
                 }}
               >
                 <option value="">Select from table...</option>
-                {availableBridges.map((b: Record<string, unknown>, i: number) => (
-                  <option key={i} value={String(b['CONTROLS/BRidge'] || b['Bridge Size'] || b['WEAPONS'])}>
-                    {String(b['CONTROLS/BRidge'] || b['Bridge Size'] || b['WEAPONS'])} — {Number(b['CONTROLS/ BRIDGE'] || b['DTONS'] || b['Tons'] || 0)} DT
-                  </option>
-                ))}
+                {availableBridges.map((b: Record<string, unknown>, i: number) => {
+                  const name = String(b['CONTROLS/BRidge'] || b['Bridge Size'] || b['WEAPONS']);
+                  const dt = Number(b['CONTROLS/ BRIDGE'] || b['DTONS'] || b['Tons'] || 0);
+                  const costPerDt = Number(b['COST per DTON'] || b['COST'] || 0);
+                  return (
+                    <option key={i} value={name}>
+                      {name} — {fmtTons(dt)} | {fmtCost(costPerDt * dt)}
+                    </option>
+                  );
+                })}
               </select>
             </div>
           </div>
@@ -765,7 +946,7 @@ export function ShipDesigner() {
               <option value="">Select from table...</option>
               {computers.map((c: Record<string, unknown>, i: number) => (
                 <option key={i} value={String(c['Model'])}>
-                  {String(c['Model'])} — TL {Number(c['TL'])} | Rating {Number(c['Rating'])} | {Number(c['Cost']).toLocaleString()} Cr
+                  {String(c['Model'])} — {fmtCost(Number(c['Cost'] || 0))} | TL{Number(c['TL'])}
                 </option>
               ))}
             </select>
@@ -880,7 +1061,7 @@ export function ShipDesigner() {
               <option value="">Select from table...</option>
               {sensorList.map((s: Record<string, unknown>, i: number) => (
                 <option key={i} value={String(s['Sensors'])}>
-                  {String(s['Sensors'])} — {Number(s['Tons'])} DT | DM {String(s['DM'])} | {Number(s['Cost']).toLocaleString()} Cr
+                  {String(s['Sensors'])} — {fmtTons(Number(s['Tons'] || 0))} | {fmtCost(Number(s['Cost'] || 0))} | TL{Number(s['TL'] || 8)}
                 </option>
               ))}
             </select>
@@ -933,7 +1114,7 @@ export function ShipDesigner() {
               <option value="">Select from table...</option>
               {(tables.life_support?.rows || []).map((l: Record<string, unknown>, i: number) => (
                 <option key={i} value={String(l['LIFE SUPPORT'])}>
-                  {String(l['LIFE SUPPORT'])} — {Number(l['DTONS'])} DT | {Number(l['COST']).toLocaleString()} Cr
+                  {String(l['LIFE SUPPORT'])} — {fmtTons(Number(l['DTONS'] || 0))} | {fmtCost(Number(l['COST'] || 0))} | TL{Number(l['TL'] || 7)}
                 </option>
               ))}
             </select>
@@ -998,7 +1179,7 @@ export function ShipDesigner() {
               <option value="">Select from table...</option>
               {modules.map((m: Record<string, unknown>, i: number) => (
                 <option key={i} value={String(m['MODULES'] || m['Module'])}>
-                  {String(m['MODULES'] || m['Module'])} — {Number(m['DTONS'] || m['Dtons'] || 0)} DT | {Number(m['COST'] || m['Cost'] || 0).toLocaleString()} Cr
+                  {String(m['MODULES'] || m['Module'])} — {fmtTons(Number(m['DTONS'] || m['Dtons'] || 0))} | {fmtCost(Number(m['COST'] || m['Cost'] || 0))} | TL{Number(m['TL'] || 7)}
                 </option>
               ))}
             </select>
@@ -1091,7 +1272,7 @@ export function ShipDesigner() {
                 <option value="">Select mount from table...</option>
                 {weapons.filter((w: Record<string, unknown>) => String(w['WEAPONS']).includes('Turret') || String(w['WEAPONS']).includes('Bay') || String(w['WEAPONS']).includes('Hard')).map((w: Record<string, unknown>, i: number) => (
                   <option key={i} value={String(w['WEAPONS'])}>
-                    {String(w['WEAPONS'])} — {Number(w['DTONS'])} DT | {Number(w['COST']).toLocaleString()} Cr
+                    {String(w['WEAPONS'])} — {fmtTons(Number(w['DTONS'] || 0))} | {fmtCost(Number(w['COST'] || 0))} | TL{Number(w['TL'] || 7)}
                   </option>
                 ))}
               </select>
@@ -1197,7 +1378,7 @@ export function ShipDesigner() {
                 <option value="">Select from table...</option>
                 {(tables.ship_supplies?.rows || []).map((s: Record<string, unknown>, i: number) => (
                   <option key={i} value={String(s['Supply'])}>
-                    {String(s['Supply'])} — {Number(s['Dtons'])} DT | {Number(s['Cost']).toLocaleString()} Cr
+                    {String(s['Supply'])} — {fmtTons(Number(s['Dtons'] || 0))} | {fmtCost(Number(s['Cost'] || 0))} | TL{Number(s['TL'] || 6)}
                   </option>
                 ))}
               </select>
@@ -1241,8 +1422,8 @@ export function ShipDesigner() {
                         <td className="py-1.5">{p.position}</td>
                         <td className="py-1.5 text-center">{p.minimum}</td>
                         <td className="py-1.5 text-center">{p.fullComplement}</td>
-                        <td className="py-1.5 text-right">{p.salary.toLocaleString()} Cr</td>
-                        <td className="py-1.5 text-right">{p.shiftPay.toLocaleString()} Cr</td>
+                        <td className="py-1.5 text-right">{fmtNumber(p.salary)} Cr</td>
+                        <td className="py-1.5 text-right">{fmtNumber(p.shiftPay)} Cr</td>
                       </tr>
                     ))}
                   </tbody>
@@ -1293,7 +1474,7 @@ export function ShipDesigner() {
                 <div key={ship.id} className="flex items-center justify-between p-2 bg-slate-800 rounded">
                   <button onClick={() => loadShip(ship)} className="text-left flex-1">
                     <div className="text-sm font-medium">{ship.name}</div>
-                    <div className="text-xs text-slate-400">{ship.hullDtons}DT | TL{ship.tl} | {(ship.totalCost / 1e6).toFixed(1)} MCr</div>
+                    <div className="text-xs text-slate-400">{fmtTons(ship.hullDtons)} | TL{ship.tl} | {fmtCost(ship.totalCost)}</div>
                   </button>
                   <button onClick={() => deleteShip(ship.id)} className="p-1 hover:bg-red-900/30 rounded text-slate-500 hover:text-red-400">
                     <Trash2 className="w-3.5 h-3.5" />
