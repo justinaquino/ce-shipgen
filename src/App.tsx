@@ -74,7 +74,7 @@ function App() {
 
   useEffect(() => {
     const seenVersion = localStorage.getItem('ce_shipgen_seen_version');
-    fetch('/version.json')
+    fetch(`${import.meta.env.BASE_URL}version.json`)
       .then(r => r.json())
       .then((data: { version: string }) => {
         if (!seenVersion || seenVersion !== data.version) {

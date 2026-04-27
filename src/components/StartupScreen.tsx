@@ -20,7 +20,7 @@ export function StartupScreen({ onDismiss }: StartupScreenProps) {
   const [dontShow, setDontShow] = useState(false);
 
   useEffect(() => {
-    fetch('/version.json')
+    fetch(`${import.meta.env.BASE_URL}version.json`)
       .then(r => r.json())
       .then((data: VersionInfo) => {
         setVersion(data);

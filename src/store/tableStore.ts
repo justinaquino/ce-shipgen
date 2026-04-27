@@ -3,26 +3,28 @@ import { persist } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
 import type { DataTable, TableId, ShipDesign } from '../types';
 
+const BASE = import.meta.env.BASE_URL;
+
 const TABLE_FILES: Record<TableId, string> = {
-  ship_hulls: '/data/ship_hulls.json',
-  hull_configurations: '/data/hull_configurations.json',
-  ship_armor: '/data/ship_armor.json',
-  hull_options: '/data/hull_options.json',
-  ship_bridge: '/data/ship_bridge.json',
-  computer_options: '/data/computer_options.json',
-  ship_software: '/data/ship_software.json',
-  ship_weapons: '/data/ship_weapons.json',
-  ship_drives: '/data/ship_drives.json',
-  ship_crew: '/data/ship_crew.json',
-  life_support: '/data/life_support.json',
-  ship_modules: '/data/ship_modules.json',
-  ship_sensors: '/data/ship_sensors.json',
-  ship_vehicles: '/data/ship_vehicles.json',
-  ship_supplies: '/data/ship_supplies.json',
-  power_plants: '/data/power_plants.json',
-  life_support_expenses: '/data/life_support_expenses.json',
-  engine_performance: '/data/engine_performance.json',
-  ship_computers: '/data/ship_computers.json',
+  ship_hulls: `${BASE}data/ship_hulls.json`,
+  hull_configurations: `${BASE}data/hull_configurations.json`,
+  ship_armor: `${BASE}data/ship_armor.json`,
+  hull_options: `${BASE}data/hull_options.json`,
+  ship_bridge: `${BASE}data/ship_bridge.json`,
+  computer_options: `${BASE}data/computer_options.json`,
+  ship_software: `${BASE}data/ship_software.json`,
+  ship_weapons: `${BASE}data/ship_weapons.json`,
+  ship_drives: `${BASE}data/ship_drives.json`,
+  ship_crew: `${BASE}data/ship_crew.json`,
+  life_support: `${BASE}data/life_support.json`,
+  ship_modules: `${BASE}data/ship_modules.json`,
+  ship_sensors: `${BASE}data/ship_sensors.json`,
+  ship_vehicles: `${BASE}data/ship_vehicles.json`,
+  ship_supplies: `${BASE}data/ship_supplies.json`,
+  power_plants: `${BASE}data/power_plants.json`,
+  life_support_expenses: `${BASE}data/life_support_expenses.json`,
+  engine_performance: `${BASE}data/engine_performance.json`,
+  ship_computers: `${BASE}data/ship_computers.json`,
 };
 
 const TABLE_NAMES: Record<TableId, string> = {
