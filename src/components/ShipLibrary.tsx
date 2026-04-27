@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useTableStore } from '../store/tableStore';
 import { downloadJson, generateSnapshotName } from '../utils/exportImport';
 import { ShipDetailModal } from './ShipDetailModal';
@@ -6,6 +7,7 @@ import { Download, Trash2, Edit3, FileJson, Eye } from 'lucide-react';
 import type { ShipDesign } from '../types';
 
 export function ShipLibrary() {
+  const navigate = useNavigate();
   const ships = useTableStore((s) => s.ships);
   const deleteShip = useTableStore((s) => s.deleteShip);
   const setCurrentShip = useTableStore((s) => s.setCurrentShip);
@@ -59,7 +61,7 @@ export function ShipLibrary() {
                     <button 
                       onClick={() => {
                         setCurrentShip(ship);
-                        window.location.hash = '#/design';
+                        navigate('/design');
                       }}
                       className="p-1.5 hover:bg-slate-700 rounded text-slate-400 hover:text-blue-400"
                       title="Edit"
@@ -118,7 +120,7 @@ export function ShipLibrary() {
           onEdit={(ship) => {
             setCurrentShip(ship);
             setDetailShip(null);
-            window.location.hash = '#/design';
+            navigate('/design');
           }}
           onDelete={deleteShip}
           onExport={exportShip}

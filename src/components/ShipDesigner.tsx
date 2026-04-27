@@ -8,7 +8,7 @@ import { downloadJson, generateSnapshotName } from '../utils/exportImport';
 import {
   calcArmorTonnage, calcArmorCost, calcJumpFuel, calcPowerFuel,
   getMinPowerPlantLetter, calcStateroomTonnage, calcStateroomCost,
-  calcLowBerthTonnage, calcLowBerthCost,
+  calcLowBerthTonnage, calcLowBerthCost, calcCrewRequirements,
 } from '../calculations';
 import { validateShip } from '../validations';
 import { Save, Calculator, Trash2, AlertTriangle, CheckCircle } from 'lucide-react';
@@ -44,9 +44,8 @@ export function ShipDesigner() {
   const [hullCode, setHullCode] = useState('');
   const [config, setConfig] = useState('Standard');
 
-  // ─── Armor ───
-  const [armorType, setArmorType] = useState('');
-  const [armorQty, setArmorQty] = useState(1);
+  // ─── Armor (child table) ───
+  const [armorRows, setArmorRows] = useState<ChildItem[]>([]);
 
   const [jumpParsecs, setJumpParsecs] = useState(0);
 
@@ -115,11 +114,17 @@ export function ShipDesigner() {
   const selectedConfig = configs.find((c: Record<string, unknown>) => String(c['Configuration']).includes(config));
   const configMod = selectedConfig ? Number(selectedConfig['Hull Cost Modifier'] || 0) : 0;
 
-  // ─── Armor ───
-  const selectedArmor = armors.find((a: Record<string, unknown>) => String(a['Armor Type']).includes(armorType));
-  const armorCostMod = selectedArmor ? Number(selectedArmor['Cost Factor'] || selectedArmor['Cost'] || 0) : 0;
-  const armorTons = calcArmorTonnage(hullDtons, 0.05, armorQty, 1.0);
-  const armorCost = calcArmorCost(hullCost, armorCostMod, armorQty);
+  // ─── Armor Calculations ───
+  const armorTons = armorRows.reduce((s, r) => {
+    const a = armors.find((ar: Record<string, unknown>) => String(ar['Armor Type']).includes(r.name));
+    const pct = a ? Number(a['Cost Factor'] || a['Prot'] || 0.05) : 0.05;
+    return s + calcArmorTonnage(hullDtons, pct, r.qty, 1.0);
+  }, 0);
+  const armorCost = armorRows.reduce((s, r) => {
+    const a = armors.find((ar: Record<string, unknown>) => String(ar['Armor Type']).includes(r.name));
+    const costMod = a ? Number(a['Cost Factor'] || a['Cost'] || 0) : 0;
+    return s + calcArmorCost(hullCost, costMod, r.qty);
+  }, 0);
 
   // ─── Legacy Drives (for backward compat calcs) ───
   const selectedMDrive = drives.find((d: Record<string, unknown>) => String(d['Drive Code']) === mDrive);
@@ -145,6 +150,21 @@ export function ShipDesigner() {
   const stateroomCost = calcStateroomCost(staterooms);
   const lowBerthTons = calcLowBerthTonnage(lowBerths);
   const lowBerthCost = calcLowBerthCost(lowBerths);
+
+  // ─── Crew Calculations ───
+  const crewReqs = useMemo(() => {
+    if (!hullDtons) return null;
+    return calcCrewRequirements(
+      hullDtons,
+      !!(mDrive || powerPlant),
+      !!(jDrive && jumpParsecs > 0),
+      !!(sensors || sensorRows.length > 0),
+      (selectedWeapons.length + weaponMountRows.length),
+      staterooms + lifeSupportRows.filter(r => r.name.toLowerCase().includes('stateroom')).reduce((s, r) => s + r.qty, 0),
+      lowBerths,
+      commandRows.length,
+    );
+  }, [hullDtons, mDrive, powerPlant, jDrive, jumpParsecs, sensors, sensorRows, selectedWeapons, weaponMountRows, staterooms, lifeSupportRows, lowBerths, commandRows]);
 
   // ─── Legacy Bridge ───
   const selectedBridge = bridges.find((b: Record<string, unknown>) => String(b['CONTROLS/BRidge'] || b['Bridge Size'] || b['WEAPONS']).includes(bridge));
@@ -206,7 +226,9 @@ export function ShipDesigner() {
       list.push({ section: 'Hull', module: `${hullDtons} DT Hull`, dtons: hullDtons, cost: hullCost });
       if (configMod !== 0) list.push({ section: 'Config', module: config, dtons: 0, cost: hullCost * configMod });
     }
-    if (armorTons > 0) list.push({ section: 'Armor', module: armorType, dtons: armorTons, cost: armorCost });
+    armorRows.forEach(r => {
+      if (r.qty > 0) list.push({ section: 'Armor', module: r.name, dtons: calcArmorTonnage(hullDtons, 0.05, r.qty, 1.0), cost: calcArmorCost(hullCost, 0.05, r.qty), qty: r.qty });
+    });
     if (mDriveTons > 0) list.push({ section: 'M-Drive', module: mDrive, dtons: mDriveTons, cost: mDriveCost });
     if (jDriveTons > 0) list.push({ section: 'J-Drive', module: jDrive, dtons: jDriveTons, cost: jDriveCost });
     if (ppTons > 0) list.push({ section: 'Power Plant', module: powerPlant, dtons: ppTons, cost: ppCost });
@@ -222,8 +244,17 @@ export function ShipDesigner() {
     list.push(...weaponComponents);
     supplyRows.forEach(r => list.push({ section: 'Supplies', module: r.name, dtons: r.dtons * r.qty, cost: r.cost * r.qty, qty: r.qty }));
     if (cargo > 0) list.push({ section: 'Cargo', module: 'Cargo Hold', dtons: cargo, cost: 0 });
+    // Crew costs (monthly salaries as a one-line summary, not tonnage)
+    if (crewReqs) {
+      list.push({ section: 'Crew', module: `Minimum Crew (${crewReqs.totalMinimum})`, dtons: 0, cost: 0 });
+      crewReqs.positions.forEach(p => {
+        if (p.fullComplement > 0) {
+          list.push({ section: 'Crew', module: `${p.position} ×${p.fullComplement}`, dtons: 0, cost: p.salary * p.fullComplement, notes: `${p.salary.toLocaleString()} Cr/mo each` });
+        }
+      });
+    }
     return list;
-  }, [hullDtons, hullCost, config, configMod, armorTons, armorType, armorCost, mDriveTons, mDrive, mDriveCost, jDriveTons, jDrive, jDriveCost, ppTons, powerPlant, ppCost, bridgeTons, bridge, bridgeCost, totalFuel, jumpParsecs, stateroomTons, staterooms, stateroomCost, lowBerthTons, lowBerths, lowBerthCost, commandRows, computerRows, sensorRows, lifeSupportRows, moduleComponents, weaponComponents, supplyRows, cargo]);
+  }, [hullDtons, hullCost, config, configMod, armorTons, armorRows, armorCost, mDriveTons, mDrive, mDriveCost, jDriveTons, jDrive, jDriveCost, ppTons, powerPlant, ppCost, bridgeTons, bridge, bridgeCost, totalFuel, jumpParsecs, stateroomTons, staterooms, stateroomCost, lowBerthTons, lowBerths, lowBerthCost, commandRows, computerRows, sensorRows, lifeSupportRows, moduleComponents, weaponComponents, supplyRows, cargo]);
 
   // ─── Validation ───
   const validation = useMemo(() => {
@@ -231,7 +262,8 @@ export function ShipDesigner() {
     const design: ShipDesign = {
       id: currentShip?.id || 'temp',
       name, tl, hullCode, hullDtons, configuration: config,
-      armor: armorType, armorQty,
+      armor: armorRows.map(r => r.name).join(', ') || 'None',
+      armorQty: armorRows.reduce((s, r) => s + r.qty, 0),
       mDrive, jDrive, powerPlant,
       bridge, computer, software: softwareList,
       sensors, staterooms, lowBerths,
@@ -242,7 +274,7 @@ export function ShipDesigner() {
       createdAt: currentShip?.createdAt || new Date().toISOString(),
     };
     return validateShip(design);
-  }, [name, tl, hullCode, hullDtons, config, armorType, armorQty, mDrive, jDrive, powerPlant, bridge, computer, softwareList, sensors, staterooms, lowBerths, moduleComponents, weaponComponents, cargo, components, totalCost, availableDtons, currentShip]);
+  }, [name, tl, hullCode, hullDtons, config, armorRows, mDrive, jDrive, powerPlant, bridge, computer, softwareList, sensors, staterooms, lowBerths, moduleComponents, weaponComponents, cargo, components, totalCost, availableDtons, currentShip]);
 
   // ─── Actions ───
   const saveShip = () => {
@@ -253,8 +285,8 @@ export function ShipDesigner() {
       hullCode,
       hullDtons,
       configuration: config,
-      armor: armorType,
-      armorQty,
+      armor: armorRows.map(r => r.name).join(', ') || 'None',
+      armorQty: armorRows.reduce((s, r) => s + r.qty, 0),
       mDrive,
       jDrive,
       powerPlant,
@@ -285,7 +317,8 @@ export function ShipDesigner() {
       id: `export-${Date.now()}`,
       name: name || generateShipName(hullDtons),
       tl, hullCode, hullDtons, configuration: config,
-      armor: armorType, armorQty,
+      armor: armorRows.map(r => r.name).join(', ') || 'None',
+      armorQty: armorRows.reduce((s, r) => s + r.qty, 0),
       mDrive, jDrive, powerPlant,
       bridge, computer, software: softwareList,
       sensors, staterooms, lowBerths,
@@ -303,8 +336,13 @@ export function ShipDesigner() {
     setTl(ship.tl);
     setHullCode(ship.hullCode);
     setConfig(ship.configuration);
-    setArmorType(ship.armor);
-    setArmorQty(ship.armorQty || 1);
+    // Legacy armor load
+    if (ship.armor && ship.armor !== 'None') {
+      setArmorRows([{ id: `armor-${Date.now()}`, name: ship.armor, dtons: 0, cost: 0, qty: ship.armorQty || 1 }]);
+    } else {
+      setArmorRows([]);
+    }
+    // armorRows is the new state
     setMDrive(ship.mDrive || '');
     setJDrive(ship.jDrive || '');
     setPowerPlant(ship.powerPlant || '');
@@ -324,8 +362,7 @@ export function ShipDesigner() {
     setTl(9);
     setHullCode('');
     setConfig('Standard');
-    setArmorType('');
-    setArmorQty(1);
+    setArmorRows([]);
     setMDrive('');
     setJDrive('');
     setPowerPlant('');
@@ -474,26 +511,57 @@ export function ShipDesigner() {
 
         {/* 3. Armor */}
         <CollapsibleSection title="3. Armor" defaultOpen>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm text-slate-400 mb-1">Armor Type</label>
-              <select className="input w-full" value={armorType} onChange={(e) => setArmorType(e.target.value)}>
-                <option value="">None</option>
-                {armors.map((a: Record<string, unknown>, i: number) => (
-                  <option key={i} value={String(a['Armor Type'])}>
-                    {String(a['Armor Type'])} — Prot {Number(a['Prot'] || a['Protection'] || 0)}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm text-slate-400 mb-1">Layers (Qty)</label>
-              <input className="input w-full" type="number" min={1} max={10} value={armorQty} onChange={(e) => setArmorQty(Number(e.target.value))} />
-            </div>
+          <ChildTable
+            title="Armor Layers"
+            items={armorRows}
+            onChange={setArmorRows}
+            columns={[
+              { key: 'name', label: 'Type', editable: true, type: 'text' },
+              { key: 'qty', label: 'Layers', editable: true, type: 'number', width: 'w-20' },
+            ]}
+            createNewItem={() => ({
+              id: `armor-${Date.now()}`,
+              name: 'Titanium Steel TL7+',
+              dtons: 0,
+              cost: 0,
+              qty: 1,
+            })}
+            addButtonLabel="Add Armor Layer"
+          />
+
+          <div className="pt-2 border-t border-slate-700">
+            <label className="block text-sm text-slate-400 mb-1">Quick Add Armor</label>
+            <select
+              className="input w-full"
+              value=""
+              onChange={(e) => {
+                if (!e.target.value) return;
+                const a = armors.find((ar: Record<string, unknown>) => String(ar['Armor Type']) === e.target.value);
+                if (a) {
+                  setArmorRows(prev => [...prev, {
+                    id: `armor-${Date.now()}`,
+                    name: String(a['Armor Type']),
+                    dtons: 0,
+                    cost: 0,
+                    qty: 1,
+                    tl: Number(a['TL'] || 7),
+                  }]);
+                }
+                e.target.value = '';
+              }}
+            >
+              <option value="">Select from table...</option>
+              {armors.map((a: Record<string, unknown>, i: number) => (
+                <option key={i} value={String(a['Armor Type'])}>
+                  {String(a['Armor Type'])} — Prot {Number(a['Prot'] || a['Protection'] || 0)} | TL {Number(a['TL'])}
+                </option>
+              ))}
+            </select>
           </div>
+
           {armorTons > 0 && (
             <div className="mt-2 text-sm text-slate-400">
-              Armor Tons: {armorTons.toFixed(1)} DT | Cost: {armorCost.toLocaleString()} Cr
+              Total Armor: {armorTons.toFixed(1)} DT | Cost: {armorCost.toLocaleString()} Cr
             </div>
           )}
         </CollapsibleSection>
@@ -1153,7 +1221,8 @@ export function ShipDesigner() {
             <div className="tile-content">
               <MnemeCombatPanel ship={{
                 id: 'preview', name, tl, hullCode, hullDtons, configuration: config,
-                armor: armorType, armorQty, mDrive, jDrive, powerPlant,
+                armor: armorRows.map(r => r.name).join(', ') || 'None',
+                armorQty: armorRows.reduce((s, r) => s + r.qty, 0),
                 bridge, computer, software: softwareList,
                 sensors, staterooms, lowBerths,
                 crew: [], modules: moduleComponents, weapons: weaponComponents,

@@ -14,10 +14,18 @@ function AppContent() {
   const loadTables = useTableStore((s) => s.loadTables);
   const loaded = useTableStore((s) => s.loaded);
   const { effectiveTheme, toggleTheme, layoutMode, toggleLayout } = useSettings();
+  const [version, setVersion] = useState<string>('');
 
   useEffect(() => {
     if (!loaded) loadTables();
   }, [loaded, loadTables]);
+
+  useEffect(() => {
+    fetch(`${import.meta.env.BASE_URL}version.json`)
+      .then(r => r.json())
+      .then((data: { version: string }) => setVersion(data.version))
+      .catch(() => setVersion(''));
+  }, []);
 
   return (
     <div className={`min-h-screen ${effectiveTheme === 'dark' ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'}`}>
@@ -26,6 +34,9 @@ function AppContent() {
           <div className="flex items-center gap-2">
             <span className="text-xl font-bold text-blue-500">CE ShipGen</span>
             <span className="text-xs text-slate-500 bg-slate-800/50 px-2 py-0.5 rounded">PWA</span>
+            {version && (
+              <span className="text-xs text-cyan-500 bg-cyan-900/20 px-2 py-0.5 rounded">v{version}</span>
+            )}
             {layoutMode === 'phone' && (
               <span className="text-xs text-amber-500 bg-amber-900/20 px-2 py-0.5 rounded">Phone</span>
             )}
