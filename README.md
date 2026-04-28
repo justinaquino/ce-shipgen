@@ -319,6 +319,7 @@ Licensed under **GPL v3** - you can:
 | [PRD.md](./PRD.md) | Product Requirements Document - 20 FRs, user stories, technical specs |
 | [PROJECT_NOTES.md](./PROJECT_NOTES.md) | Development timelog, assumptions, problems encountered, current status |
 | [CE-Chapter-8-Ship-Design-and-Construction.md](./CE-Chapter-8-Ship-Design-and-Construction.md) | Source rules from Cepheus Engine SRD |
+| [MNEME_SPACE_COMBAT_RULES.md](./MNEME_SPACE_COMBAT_RULES.md) | Mneme Space Combat variant rules (wiki mirror) — all 8 chapters |
 
 ---
 

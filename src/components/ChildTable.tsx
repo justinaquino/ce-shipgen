@@ -7,7 +7,7 @@ interface ChildTableProps {
   title: string;
   items: ChildItem[];
   onChange: (items: ChildItem[]) => void;
-  columns: { key: keyof ChildItem; label: string; width?: string; editable?: boolean; type?: 'text' | 'number'; step?: string | number }[];
+  columns: { key: keyof ChildItem; label: string; width?: string; editable?: boolean; type?: 'text' | 'number' | 'select'; step?: string | number; options?: { value: string; label: string }[] }[];
   renderRow?: (item: ChildItem, index: number, update: (patch: Partial<ChildItem>) => void) => React.ReactNode;
   renderSubTable?: (item: ChildItem, index: number) => React.ReactNode;
   maxItems?: number;
@@ -110,27 +110,52 @@ export function ChildTable({
                     {columns.map((col) => (
                       <div key={col.key as string} className={col.width || 'flex-1'}>
                         {col.editable ? (
-                          <input
-                            type={col.type || 'text'}
-                            step={col.step}
-                            style={{
-                              width: '100%',
-                              padding: '6px 8px',
-                              background: colors.panel,
-                              border: `1px solid ${colors.hair}`,
-                              color: colors.ink,
-                              fontFamily: fonts.mono,
-                              fontSize: 12,
-                              outline: 'none',
-                            }}
-                            value={item[col.key] as string | number}
-                            onChange={(e) => {
-                              const val = col.type === 'number' ? Number(e.target.value) : e.target.value;
-                              updateItem(idx, { [col.key]: val } as Partial<ChildItem>);
-                            }}
-                            onFocus={(e) => { e.currentTarget.style.borderColor = colors.glow; }}
-                            onBlur={(e) => { e.currentTarget.style.borderColor = colors.hair; }}
-                          />
+                          col.type === 'select' ? (
+                            <select
+                              style={{
+                                width: '100%',
+                                padding: '6px 8px',
+                                background: colors.panel,
+                                border: `1px solid ${colors.hair}`,
+                                color: colors.ink,
+                                fontFamily: fonts.mono,
+                                fontSize: 12,
+                                outline: 'none',
+                              }}
+                              value={String(item[col.key] ?? '')}
+                              onChange={(e) => {
+                                updateItem(idx, { [col.key]: e.target.value } as Partial<ChildItem>);
+                              }}
+                              onFocus={(e) => { e.currentTarget.style.borderColor = colors.glow; }}
+                              onBlur={(e) => { e.currentTarget.style.borderColor = colors.hair; }}
+                            >
+                              {col.options?.map((opt) => (
+                                <option key={opt.value} value={opt.value}>{opt.label}</option>
+                              ))}
+                            </select>
+                          ) : (
+                            <input
+                              type={col.type || 'text'}
+                              step={col.step}
+                              style={{
+                                width: '100%',
+                                padding: '6px 8px',
+                                background: colors.panel,
+                                border: `1px solid ${colors.hair}`,
+                                color: colors.ink,
+                                fontFamily: fonts.mono,
+                                fontSize: 12,
+                                outline: 'none',
+                              }}
+                              value={item[col.key] as string | number}
+                              onChange={(e) => {
+                                const val = col.type === 'number' ? Number(e.target.value) : e.target.value;
+                                updateItem(idx, { [col.key]: val } as Partial<ChildItem>);
+                              }}
+                              onFocus={(e) => { e.currentTarget.style.borderColor = colors.glow; }}
+                              onBlur={(e) => { e.currentTarget.style.borderColor = colors.hair; }}
+                            />
+                          )
                         ) : (
                           <span style={{ fontFamily: fonts.mono, fontSize: 12, color: colors.inkSoft }}>
                             {String(item[col.key] ?? '')}

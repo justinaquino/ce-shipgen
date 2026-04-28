@@ -189,6 +189,7 @@ export interface ChildItem {
   qty: number;
   tl?: number;
   notes?: string;
+  variant?: string;
   options?: string[];
   slots?: number;
   slotItems?: ChildItem[];
