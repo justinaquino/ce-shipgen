@@ -212,7 +212,37 @@
 
 ---
 
-### Future / Phase 2 *(not yet in PRD scope)*
+### MSC Simulator — Space Combat Mini-Game *(Phase 2 flagship)*
+
+An automated space combat simulator using Mneme rules. CE RAW is not built for this extent of combat — Mneme's streamlined damage, MAC, and opposed-roll mechanics make大规模 simulation feasible.
+
+**Bots & Scenarios:**
+- AI-driven bots pilot ships using Mneme action economy (3 MA, 1 SA, 1 RA per turn)
+- Pre-set encounter scenarios: convoy ambush, system patrol, pirate interception, fleet battle
+- Bots evaluate range bands, thrust budgets, and MAC thresholds to decide attacks/evasions
+- Configurable AI aggression/tactics profiles
+
+**TL Factions with Fractions:**
+- Ships are grouped by TL faction (TL7, TL8, TL9, TL10…)
+- Each faction's weapon values drift based on aggregate simulator results
+- TLs have fractional granularity (e.g. TL 9.3) — performance data from thousands of simulated battles re fines weapon damage, armor penetration, and sensor DM
+- Data-driven balancing: weapons that underperform in sims get buffed; overperformers get dialed back
+
+**Solo Campaign Mode:**
+- Load a crew from CE Character Generation (skills, stats, background)
+- Play solo against a gauntlet of encounters
+- After each battle: auto-refresh resources (fuel, ammo, life support), salvage wreckage for parts/credits, loot enemy ships
+- Persistent crew progression — skills improve through use (Mneme skill system)
+- Ship upgrades purchased from salvage proceeds
+- Run until the crew retires, dies, or makes enough to buy their dream ship
+
+**Simulation Engine:**
+- Headless batch mode: run 10,000 fleet-vs-fleet engagements overnight to tune TL faction stats
+- Per-battle log: initiative order, action choices, damage rolls, crew casualties, morales outcomes
+- Aggregate statistics: win rates by TL, weapon efficiency ratings, survival curves
+- Feeds back into the TL fraction system for dynamic campaign balancing
+
+### Other Future *(Phase 2+)*
 
 | Feature | Notes |
 |---------|-------|

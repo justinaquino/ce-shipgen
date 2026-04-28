@@ -292,13 +292,16 @@ export function ShipDesigner() {
     }
   }, [hullDtons]);
 
-  // ─── Auto-populate drive rows when model changes ───
+  // ─── Auto-populate drive rows when model or hull changes ───
   const lastMDriveNames = useRef<string[]>([]);
+  const lastHullForThrust = useRef<number>(0);
   useEffect(() => {
     const currentNames = mDriveRows.map(r => r.name);
-    const changed = mDriveRows.some((row, idx) => row.name !== lastMDriveNames.current[idx]);
-    if (!changed) return;
+    const nameChanged = mDriveRows.some((row, idx) => row.name !== lastMDriveNames.current[idx]);
+    const hullChanged = hullDtons !== lastHullForThrust.current;
+    if (!nameChanged && !hullChanged) return;
     lastMDriveNames.current = currentNames;
+    lastHullForThrust.current = hullDtons;
     const updated = mDriveRows.map((row) => {
       const d = drives.find((dr: Record<string, unknown>) => String(dr['Drive Code']) === row.name);
       if (!d) return { ...row, tl, notes: `Thrust-?` };
@@ -312,7 +315,7 @@ export function ShipDesigner() {
     });
     setMDriveRows(updated);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mDriveRows]);
+  }, [mDriveRows, hullDtons]);
 
   const lastJDriveNames = useRef<string[]>([]);
   useEffect(() => {
@@ -369,20 +372,47 @@ export function ShipDesigner() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ppRows]);
 
+  // ─── Auto-populate armor rows when model or hull changes ───
+  const lastArmorNames = useRef<string[]>([]);
+  const lastArmorQtys = useRef<number[]>([]);
+  const lastHullForArmor = useRef<number>(0);
+  useEffect(() => {
+    const currentNames = armorRows.map(r => r.name);
+    const currentQtys = armorRows.map(r => r.qty);
+    const nameChanged = armorRows.some((row, idx) => row.name !== lastArmorNames.current[idx]);
+    const qtyChanged = armorRows.some((row, idx) => row.qty !== lastArmorQtys.current[idx]);
+    const hullChanged = hullDtons !== lastHullForArmor.current;
+    if (!nameChanged && !qtyChanged && !hullChanged) return;
+    lastArmorNames.current = currentNames;
+    lastArmorQtys.current = currentQtys;
+    lastHullForArmor.current = hullDtons;
+    const updated = armorRows.map((row) => {
+      const a = armors.find((ar: Record<string, unknown>) => String(ar['Armor Type']).includes(row.name));
+      if (!a) return { ...row, notes: 'Armor-?', dtons: 0, cost: 0 };
+      const pct = Number(a['Cost Factor'] || 0.05);
+      const prot = Number(a['Prot'] || a['Protection'] || 0);
+      return {
+        ...row,
+        tl: Number(a['TL'] || 7),
+        notes: `Armor-${prot}`,
+        dtons: calcArmorTonnage(hullDtons, pct, row.qty, 1.0),
+        cost: calcArmorCost(hullCost, pct, row.qty),
+      };
+    });
+    setArmorRows(updated);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [armorRows, hullDtons, hullCost]);
+
   const selectedConfig = configs.find((c: Record<string, unknown>) => String(c['Configuration']).includes(config));
   const configMod = selectedConfig ? Number(selectedConfig['Hull Cost Modifier'] || 0) : 0;
 
-  // ─── Armor Calculations ───
-  const armorTons = armorRows.reduce((s, r) => {
-    const a = armors.find((ar: Record<string, unknown>) => String(ar['Armor Type']).includes(r.name));
-    const pct = a ? Number(a['Cost Factor'] || a['Prot'] || 0.05) : 0.05;
-    return s + calcArmorTonnage(hullDtons, pct, r.qty, 1.0);
-  }, 0);
-  const armorCost = armorRows.reduce((s, r) => {
-    const a = armors.find((ar: Record<string, unknown>) => String(ar['Armor Type']).includes(r.name));
-    const costMod = a ? Number(a['Cost Factor'] || a['Cost'] || 0) : 0;
-    return s + calcArmorCost(hullCost, costMod, r.qty);
-  }, 0);
+  // ─── Armor Calculations (use row values if auto-populated) ───
+  const armorTons = armorRows.length > 0
+    ? armorRows.reduce((s, r) => s + r.dtons, 0)
+    : 0;
+  const armorCost = armorRows.length > 0
+    ? armorRows.reduce((s, r) => s + r.cost, 0)
+    : 0;
 
   // ─── Legacy Drives (for backward compat calcs) ───
   const selectedMDrive = drives.find((d: Record<string, unknown>) => String(d['Drive Code']) === mDrive);
@@ -542,7 +572,7 @@ export function ShipDesigner() {
       if (configMod !== 0) list.push({ section: 'Config', module: config, dtons: 0, cost: hullCost * configMod });
     }
     armorRows.forEach(r => {
-      if (r.qty > 0) list.push({ section: 'Armor', module: r.name, dtons: calcArmorTonnage(hullDtons, 0.05, r.qty, 1.0), cost: calcArmorCost(hullCost, 0.05, r.qty), qty: r.qty });
+      if (r.qty > 0) list.push({ section: 'Armor', module: `${r.name}${r.notes ? ` · ${r.notes}` : ''}`, dtons: r.dtons, cost: r.cost, qty: r.qty });
     });
     // M-Drive: child table OR legacy
     if (mDriveRows.length > 0) {
@@ -971,34 +1001,50 @@ export function ShipDesigner() {
             items={armorRows}
             onChange={setArmorRows}
             columns={[
-              { key: 'name', label: 'TYPE', editable: true, type: 'text' },
-              { key: 'qty', label: 'LAYERS', editable: true, type: 'number', width: 'w-20', step: '0.1' },
+              { key: 'name', label: 'MODEL', editable: true, type: 'select', width: 'w-40', options: armors.map((a: Record<string, unknown>) => ({ value: String(a['Armor Type']), label: String(a['Armor Type']) })) },
+              { key: 'notes', label: 'RATING', editable: false, width: 'w-20' },
+              { key: 'dtons', label: 'DTONS', editable: true, type: 'number', width: 'w-20' },
+              { key: 'cost', label: 'COST', editable: true, type: 'number', width: 'w-24' },
+              { key: 'qty', label: 'LAYERS', editable: true, type: 'number', width: 'w-16', step: '0.1' },
             ]}
-            createNewItem={() => ({
-              id: `armor-${Date.now()}`,
-              name: 'Titanium Steel TL7+',
-              dtons: 0,
-              cost: 0,
-              qty: 1,
-            })}
+            createNewItem={() => {
+              const a = armors[0];
+              return {
+                id: `armor-${Date.now()}`,
+                name: a ? String(a['Armor Type']) : 'Titanium Steel TL7+',
+                tl: a ? Number(a['TL'] || 7) : 7,
+                notes: a ? `Armor-${Number(a['Prot'] || 0)}` : 'Armor-2',
+                dtons: a ? calcArmorTonnage(hullDtons, Number(a['Cost Factor'] || 0.05), 1, 1.0) : calcArmorTonnage(hullDtons, 0.05, 1, 1.0),
+                cost: a ? calcArmorCost(hullCost, Number(a['Cost Factor'] || 0.05), 1) : calcArmorCost(hullCost, 0.05, 1),
+                qty: 1,
+              };
+            }}
             addButtonLabel="ADD ARMOR LAYER"
+            summary={armorRows.length > 0 ? (
+              <ShData size={12} dim>
+                {armorRows.reduce((s, r) => s + r.dtons, 0).toFixed(1)} DT · {fmtCost(armorRows.reduce((s, r) => s + r.cost, 0))}
+              </ShData>
+            ) : undefined}
           />
           <div style={{ marginTop: 12 }}>
             <ShField
               label="QUICK ADD ARMOR"
               value=""
-              options={[{ value: '', label: '— SELECT FROM TABLE —' }, ...armors.map((a: Record<string, unknown>) => ({ value: String(a['Armor Type']), label: `${String(a['Armor Type'])} · P${Number(a['Prot'] || a['Protection'] || 0)} · TL${Number(a['TL'])}` }))]}
+              options={[{ value: '', label: '— SELECT FROM TABLE —' }, ...armors.map((a: Record<string, unknown>) => ({ value: String(a['Armor Type']), label: `${String(a['Armor Type'])} · Armor-${Number(a['Prot'] || a['Protection'] || 0)} · TL${Number(a['TL'])}` }))]}
               onChange={(v) => {
                 if (!v) return;
                 const a = armors.find((ar: Record<string, unknown>) => String(ar['Armor Type']) === v);
                 if (a) {
+                  const pct = Number(a['Cost Factor'] || 0.05);
+                  const prot = Number(a['Prot'] || a['Protection'] || 0);
                   setArmorRows(prev => [...prev, {
                     id: `armor-${Date.now()}`,
                     name: String(a['Armor Type']),
-                    dtons: 0,
-                    cost: 0,
-                    qty: 1,
                     tl: Number(a['TL'] || 7),
+                    notes: `Armor-${prot}`,
+                    dtons: calcArmorTonnage(hullDtons, pct, 1, 1.0),
+                    cost: calcArmorCost(hullCost, pct, 1),
+                    qty: 1,
                   }]);
                 }
               }}
