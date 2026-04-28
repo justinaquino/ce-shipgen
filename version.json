@@ -1,0 +1,12 @@
+{
+  "version": "0.02",
+  "name": "CE ShipGen",
+  "date": "2026-04-27",
+  "changelog": [
+    "Phase 1: Foundation Hardening — calculation engine extracted",
+    "Jump parsecs selector (1-6) with accurate fuel calculation",
+    "Power Plant validation (PP ≥ max M-drive, J-drive)",
+    "Validation summary panel with hard error detection",
+    "TypeScript strict mode compliance"
+  ]
+}
