@@ -17,8 +17,15 @@ export function BOQView({ components, totalCost, hullDtons, usedTons, availableD
     bySection[c.section].push(c);
   });
 
-  const totalTons = components.reduce((s, c) => s + c.dtons, 0);
   const isValid = hullDtons > 0 && usedTons <= hullDtons;
+
+  // Compute per-section subtotals
+  const sectionTotals = Object.entries(bySection).map(([section, items]) => ({
+    section,
+    items,
+    dt: items.reduce((s, c) => s + c.dtons, 0),
+    cost: items.reduce((s, c) => s + c.cost, 0),
+  }));
 
   return (
     <div style={{
@@ -65,9 +72,9 @@ export function BOQView({ components, totalCost, hullDtons, usedTons, availableD
             </div>
           </div>
           <div style={{ border: `1px solid ${colors.hair}`, padding: '10px 12px', background: colors.panelAlt }}>
-            <ShLabel size={11} dim>TOTAL TONNAGE</ShLabel>
+            <ShLabel size={11} dim>ALLOCATED</ShLabel>
             <div style={{ marginTop: 4 }}>
-              <ShNum size={22}>{totalTons.toFixed(1)} DT</ShNum>
+              <ShNum size={22}>{usedTons.toFixed(1)} DT</ShNum>
             </div>
           </div>
           <div style={{ border: `1px solid ${colors.hair}`, padding: '10px 12px', background: colors.panelAlt }}>
@@ -79,14 +86,27 @@ export function BOQView({ components, totalCost, hullDtons, usedTons, availableD
         </div>
 
         {/* Section lists */}
-        {Object.entries(bySection).map(([section, items]) => (
+        {sectionTotals.map(({ section, items, dt, cost }) => (
           <div key={section}>
+            {/* Section header with subtotals */}
             <div style={{
-              fontFamily: fonts.mono, fontSize: 11, fontWeight: 600,
-              color: colors.inkDim, letterSpacing: '0.14em', textTransform: 'uppercase',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
               marginBottom: 6,
             }}>
-              {section}
+              <span style={{
+                fontFamily: fonts.mono, fontSize: 11, fontWeight: 600,
+                color: colors.inkDim, letterSpacing: '0.14em', textTransform: 'uppercase',
+              }}>
+                {section}
+              </span>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
+                <ShData size={12} dim>
+                  {dt > 0 ? `${dt.toFixed(1)} DT` : '—'}
+                </ShData>
+                <ShData size={12} dim>
+                  {cost > 0 ? `${(cost / 1e6).toFixed(2)} MCr` : '—'}
+                </ShData>
+              </div>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               {items.map((item, i) => (

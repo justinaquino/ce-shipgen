@@ -8,7 +8,7 @@ import { downloadJson, generateSnapshotName } from '../utils/exportImport';
 import { fmtNumber, fmtCost, fmtTons } from '../utils/formatters';
 import {
   calcArmorTonnage, calcArmorCost, calcJumpFuel, calcPowerFuel,
-  getMinPowerPlantLetter, calcStateroomTonnage, calcStateroomCost,
+  calcStateroomTonnage, calcStateroomCost,
   calcLowBerthTonnage, calcLowBerthCost, calcCrewRequirements,
 } from '../calculations';
 import { validateShip } from '../validations';
@@ -193,6 +193,10 @@ export function ShipDesigner() {
   // ─── Weapon Mounts (child table) ───
   const [weaponMountRows, setWeaponMountRows] = useState<ChildItem[]>([]);
 
+  // ─── Drives (child table) ───
+  const [mDriveRows, setMDriveRows] = useState<ChildItem[]>([]);
+  const [jDriveRows, setJDriveRows] = useState<ChildItem[]>([]);
+
   // ─── Cargo ───
   const [cargo, setCargo] = useState(0);
   const [supplyRows, setSupplyRows] = useState<ChildItem[]>([]);
@@ -369,55 +373,126 @@ export function ShipDesigner() {
     };
   });
 
+  // ─── Drive allocations (child table OR legacy fallback) ───
+  const mDriveAllocated = mDriveRows.length > 0
+    ? mDriveRows.reduce((s, r) => s + r.dtons * r.qty, 0)
+    : mDriveTons;
+  const jDriveAllocated = jDriveRows.length > 0
+    ? jDriveRows.reduce((s, r) => s + r.dtons * r.qty, 0)
+    : jDriveTons;
+  const mDriveCostAllocated = mDriveRows.length > 0
+    ? mDriveRows.reduce((s, r) => s + r.cost * r.qty, 0)
+    : mDriveCost;
+  const jDriveCostAllocated = jDriveRows.length > 0
+    ? jDriveRows.reduce((s, r) => s + r.cost * r.qty, 0)
+    : jDriveCost;
+
+  // ─── Bridge allocation (child table OR legacy fallback) ───
+  const bridgeAllocated = commandRows.length > 0
+    ? commandRows.reduce((s, r) => s + r.dtons * r.qty, 0)
+    : bridgeTons;
+  const bridgeCostAllocated = commandRows.length > 0
+    ? commandRows.reduce((s, r) => s + r.cost * r.qty, 0)
+    : bridgeCost;
+
+  // ─── Life support allocation (child table OR legacy fallback) ───
+  const lifeSupportAllocated = lifeSupportRows.length > 0
+    ? lifeSupportRows.reduce((s, r) => s + r.dtons * r.qty, 0)
+    : stateroomTons + lowBerthTons;
+  const lifeSupportCostAllocated = lifeSupportRows.length > 0
+    ? lifeSupportRows.reduce((s, r) => s + r.cost * r.qty, 0)
+    : stateroomCost + lowBerthCost;
+
+  // ─── Weapon allocation (child table OR legacy fallback) ───
+  const weaponAllocated = weaponMountRows.length > 0
+    ? weaponMountRows.reduce((s, r) => s + r.dtons * r.qty, 0)
+    : weaponComponents.reduce((s, c) => s + c.dtons, 0);
+  const weaponCostAllocated = weaponMountRows.length > 0
+    ? weaponMountRows.reduce((s, r) => s + r.cost * r.qty, 0)
+    : weaponComponents.reduce((s, c) => s + c.cost, 0);
+
+  // ─── Module allocation (child table + legacy toggles) ───
+  const moduleAllocated = moduleComponents.reduce((s, c) => s + c.dtons, 0) +
+    selectedModules.reduce((s, m) => {
+      const mod = modules.find((mod: Record<string, unknown>) => String(mod['MODULES'] || mod['Module']) === m.id);
+      return s + (mod ? Number(mod['DTONS'] || mod['Dtons'] || 0) * m.qty : 0);
+    }, 0);
+  const moduleCostAllocated = moduleComponents.reduce((s, c) => s + c.cost, 0) +
+    selectedModules.reduce((s, m) => {
+      const mod = modules.find((mod: Record<string, unknown>) => String(mod['MODULES'] || mod['Module']) === m.id);
+      return s + (mod ? Number(mod['COST'] || mod['Cost'] || 0) * m.qty : 0);
+    }, 0);
+
   // ─── Allocated Tons ───
   const allocatedTons = (
-    armorTons + mDriveTons + jDriveTons + ppTons + bridgeTons + totalFuel +
-    stateroomTons + lowBerthTons +
-    moduleComponents.reduce((s, c) => s + c.dtons, 0) +
-    weaponComponents.reduce((s, c) => s + c.dtons, 0) +
-    commandRows.reduce((s, r) => s + r.dtons * r.qty, 0) +
+    armorTons + mDriveAllocated + jDriveAllocated + ppTons + bridgeAllocated + totalFuel +
+    lifeSupportAllocated + moduleAllocated + weaponAllocated +
     computerRows.reduce((s, r) => s + r.dtons * r.qty, 0) +
     sensorRows.reduce((s, r) => s + r.dtons * r.qty, 0) +
-    lifeSupportRows.reduce((s, r) => s + r.dtons * r.qty, 0) +
     supplyRows.reduce((s, r) => s + r.dtons * r.qty, 0)
   );
 
   const availableDtons = hullDtons - allocatedTons;
 
   // ─── Total Cost ───
-  const totalCost = hullCost + (hullCost * configMod) + armorCost + mDriveCost + jDriveCost + ppCost +
-    bridgeCost + stateroomCost + lowBerthCost +
-    moduleComponents.reduce((s, c) => s + c.cost, 0) +
-    weaponComponents.reduce((s, c) => s + c.cost, 0) +
-    commandRows.reduce((s, r) => s + r.cost * r.qty, 0) +
+  const totalCost = hullCost + (hullCost * configMod) + armorCost + mDriveCostAllocated + jDriveCostAllocated + ppCost +
+    bridgeCostAllocated + lifeSupportCostAllocated +
+    moduleCostAllocated + weaponCostAllocated +
     computerRows.reduce((s, r) => s + r.cost * r.qty, 0) +
     sensorRows.reduce((s, r) => s + r.cost * r.qty, 0) +
-    lifeSupportRows.reduce((s, r) => s + r.cost * r.qty, 0) +
     supplyRows.reduce((s, r) => s + r.cost * r.qty, 0);
 
   // ─── BOQ Components ───
   const components: ShipComponent[] = useMemo(() => {
     const list: ShipComponent[] = [];
     if (hullDtons > 0) {
-      list.push({ section: 'Hull', module: `${hullDtons} DT Hull`, dtons: hullDtons, cost: hullCost });
+      list.push({ section: 'Hull', module: `${hullDtons} DT Hull`, dtons: 0, cost: hullCost });
       if (configMod !== 0) list.push({ section: 'Config', module: config, dtons: 0, cost: hullCost * configMod });
     }
     armorRows.forEach(r => {
       if (r.qty > 0) list.push({ section: 'Armor', module: r.name, dtons: calcArmorTonnage(hullDtons, 0.05, r.qty, 1.0), cost: calcArmorCost(hullCost, 0.05, r.qty), qty: r.qty });
     });
-    if (mDriveTons > 0) list.push({ section: 'M-Drive', module: mDrive, dtons: mDriveTons, cost: mDriveCost });
-    if (jDriveTons > 0) list.push({ section: 'J-Drive', module: jDrive, dtons: jDriveTons, cost: jDriveCost });
+    // M-Drive: child table OR legacy
+    if (mDriveRows.length > 0) {
+      mDriveRows.forEach(r => { if (r.qty > 0) list.push({ section: 'M-Drive', module: r.name, dtons: r.dtons * r.qty, cost: r.cost * r.qty, qty: r.qty }); });
+    } else if (mDriveTons > 0) {
+      list.push({ section: 'M-Drive', module: mDrive, dtons: mDriveTons, cost: mDriveCost });
+    }
+    // J-Drive: child table OR legacy
+    if (jDriveRows.length > 0) {
+      jDriveRows.forEach(r => { if (r.qty > 0) list.push({ section: 'J-Drive', module: r.name, dtons: r.dtons * r.qty, cost: r.cost * r.qty, qty: r.qty }); });
+    } else if (jDriveTons > 0) {
+      list.push({ section: 'J-Drive', module: jDrive, dtons: jDriveTons, cost: jDriveCost });
+    }
     if (ppTons > 0) list.push({ section: 'Power Plant', module: powerPlant, dtons: ppTons, cost: ppCost });
-    if (bridgeTons > 0) list.push({ section: 'Bridge', module: bridge, dtons: bridgeTons, cost: bridgeCost });
+    // Bridge: child table OR legacy
+    if (commandRows.length > 0) {
+      commandRows.forEach(r => list.push({ section: 'Command', module: r.name, dtons: r.dtons * r.qty, cost: r.cost * r.qty, qty: r.qty }));
+    } else if (bridgeTons > 0) {
+      list.push({ section: 'Bridge', module: bridge, dtons: bridgeTons, cost: bridgeCost });
+    }
     if (totalFuel > 0) list.push({ section: 'Fuel', module: `Jump-${jumpParsecs} + Power`, dtons: totalFuel, cost: 0 });
-    if (stateroomTons > 0) list.push({ section: 'Life Support', module: `${staterooms} Staterooms`, dtons: stateroomTons, cost: stateroomCost });
-    if (lowBerthTons > 0) list.push({ section: 'Life Support', module: `${lowBerths} Low Berths`, dtons: lowBerthTons, cost: lowBerthCost });
-    commandRows.forEach(r => list.push({ section: 'Command', module: r.name, dtons: r.dtons * r.qty, cost: r.cost * r.qty, qty: r.qty }));
+    // Life Support: child table OR legacy
+    if (lifeSupportRows.length > 0) {
+      lifeSupportRows.forEach(r => list.push({ section: 'Life Support', module: r.name, dtons: r.dtons * r.qty, cost: r.cost * r.qty, qty: r.qty }));
+    } else {
+      if (stateroomTons > 0) list.push({ section: 'Life Support', module: `${staterooms} Staterooms`, dtons: stateroomTons, cost: stateroomCost });
+      if (lowBerthTons > 0) list.push({ section: 'Life Support', module: `${lowBerths} Low Berths`, dtons: lowBerthTons, cost: lowBerthCost });
+    }
     computerRows.forEach(r => list.push({ section: 'Computer', module: r.name, dtons: r.dtons * r.qty, cost: r.cost * r.qty, qty: r.qty }));
     sensorRows.forEach(r => list.push({ section: 'Sensors', module: r.name, dtons: r.dtons * r.qty, cost: r.cost * r.qty, qty: r.qty }));
-    lifeSupportRows.forEach(r => list.push({ section: 'Life Support', module: r.name, dtons: r.dtons * r.qty, cost: r.cost * r.qty, qty: r.qty }));
+    // Modules: child table + legacy toggles
     list.push(...moduleComponents);
-    list.push(...weaponComponents);
+    selectedModules.forEach(m => {
+      const mod = modules.find((mod: Record<string, unknown>) => String(mod['MODULES'] || mod['Module']) === m.id);
+      if (mod) list.push({ section: 'Module', module: m.id, dtons: Number(mod['DTONS'] || mod['Dtons'] || 0) * m.qty, cost: Number(mod['COST'] || mod['Cost'] || 0) * m.qty, qty: m.qty });
+    });
+    // Weapons: child table OR legacy
+    if (weaponMountRows.length > 0) {
+      weaponMountRows.forEach(r => { if (r.qty > 0) list.push({ section: 'Weapon', module: r.name, dtons: r.dtons * r.qty, cost: r.cost * r.qty, qty: r.qty }); });
+    } else {
+      list.push(...weaponComponents);
+    }
     supplyRows.forEach(r => list.push({ section: 'Supplies', module: r.name, dtons: r.dtons * r.qty, cost: r.cost * r.qty, qty: r.qty }));
     if (cargo > 0) list.push({ section: 'Cargo', module: 'Cargo Hold', dtons: cargo, cost: 0 });
     if (crewReqs) {
@@ -429,7 +504,7 @@ export function ShipDesigner() {
       });
     }
     return list;
-  }, [hullDtons, hullCost, config, configMod, armorTons, armorRows, armorCost, mDriveTons, mDrive, mDriveCost, jDriveTons, jDrive, jDriveCost, ppTons, powerPlant, ppCost, bridgeTons, bridge, bridgeCost, totalFuel, jumpParsecs, stateroomTons, staterooms, stateroomCost, lowBerthTons, lowBerths, lowBerthCost, commandRows, computerRows, sensorRows, lifeSupportRows, moduleComponents, weaponComponents, supplyRows, cargo]);
+  }, [hullDtons, hullCost, config, configMod, armorTons, armorRows, armorCost, mDriveTons, mDrive, mDriveCost, mDriveRows, jDriveTons, jDrive, jDriveCost, jDriveRows, ppTons, powerPlant, ppCost, bridgeTons, bridge, bridgeCost, commandRows, totalFuel, jumpParsecs, stateroomTons, staterooms, stateroomCost, lowBerthTons, lowBerths, lowBerthCost, lifeSupportRows, computerRows, sensorRows, moduleComponents, selectedModules, modules, weaponComponents, weaponMountRows, supplyRows, cargo]);
 
   // ─── Validation ───
   const validation = useMemo(() => {
@@ -449,7 +524,7 @@ export function ShipDesigner() {
       createdAt: currentShip?.createdAt || new Date().toISOString(),
     };
     return validateShip(design);
-  }, [name, tl, hullCode, hullDtons, config, armorRows, mDrive, jDrive, powerPlant, bridge, computer, softwareList, sensors, staterooms, lowBerths, moduleComponents, weaponComponents, cargo, components, totalCost, availableDtons, currentShip]);
+  }, [name, tl, hullCode, hullDtons, config, armorRows, mDrive, jDrive, mDriveRows, jDriveRows, powerPlant, bridge, computer, softwareList, sensors, staterooms, lowBerths, moduleComponents, weaponComponents, cargo, components, totalCost, availableDtons, currentShip]);
 
   // ─── Actions ───
   const saveShip = () => {
@@ -472,6 +547,10 @@ export function ShipDesigner() {
       staterooms,
       lowBerths,
       crew: [],
+      drives: [
+        ...mDriveRows.map(r => ({ ...r, type: 'thrust' as const, driveCode: r.name })),
+        ...jDriveRows.map(r => ({ ...r, type: 'jump' as const, driveCode: r.name })),
+      ],
       modules: moduleComponents,
       weapons: weaponComponents,
       cargo,
@@ -498,6 +577,10 @@ export function ShipDesigner() {
       bridge, computer, software: softwareList,
       sensors, staterooms, lowBerths,
       crew: [],
+      drives: [
+        ...mDriveRows.map(r => ({ ...r, type: 'thrust' as const, driveCode: r.name })),
+        ...jDriveRows.map(r => ({ ...r, type: 'jump' as const, driveCode: r.name })),
+      ],
       modules: moduleComponents,
       weapons: weaponComponents,
       cargo, components, totalCost, availableDtons,
@@ -518,6 +601,21 @@ export function ShipDesigner() {
     }
     setMDrive(ship.mDrive || '');
     setJDrive(ship.jDrive || '');
+    const driveRows = ship.drives || [];
+    setMDriveRows(driveRows.filter((d: {type?: string; driveCode?: string}) => d.type === 'thrust').map((d: {id?: string; name?: string; driveCode?: string; dtons?: number; cost?: number; qty?: number}) => ({
+      id: d.id || `mdrive-${Date.now()}`,
+      name: d.name || d.driveCode || '',
+      dtons: d.dtons || 0,
+      cost: d.cost || 0,
+      qty: d.qty || 1,
+    })));
+    setJDriveRows(driveRows.filter((d: {type?: string; driveCode?: string}) => d.type === 'jump').map((d: {id?: string; name?: string; driveCode?: string; dtons?: number; cost?: number; qty?: number}) => ({
+      id: d.id || `jdrive-${Date.now()}`,
+      name: d.name || d.driveCode || '',
+      dtons: d.dtons || 0,
+      cost: d.cost || 0,
+      qty: d.qty || 1,
+    })));
     setPowerPlant(ship.powerPlant || '');
     setBridge(ship.bridge || '');
     setComputer(ship.computer || '');
@@ -556,6 +654,8 @@ export function ShipDesigner() {
     setLifeSupportRows([]);
     setModuleRows([]);
     setWeaponMountRows([]);
+    setMDriveRows([]);
+    setJDriveRows([]);
     setSupplyRows([]);
     setCurrentShip(null);
   };
@@ -588,13 +688,17 @@ export function ShipDesigner() {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
           <ShNum size={36} color={colors.ink}>SHIP DESIGNER</ShNum>
           <div style={{ display: 'flex', gap: 10 }}>
-            <button onClick={saveShip} className="btn-primary flex items-center gap-2">
-              <Save className="w-4 h-4" /> {currentShip ? 'UPDATE' : 'SAVE'}
-            </button>
-            {currentShip && (
-              <button onClick={exportShip} className="btn-secondary flex items-center gap-2">
-                <Calculator className="w-4 h-4" /> EXPORT
-              </button>
+            {hullDtons > 0 && (
+              <>
+                <button onClick={saveShip} className="btn-primary flex items-center gap-2">
+                  <Save className="w-4 h-4" /> {currentShip ? 'UPDATE' : 'SAVE'}
+                </button>
+                {currentShip && (
+                  <button onClick={exportShip} className="btn-secondary flex items-center gap-2">
+                    <Calculator className="w-4 h-4" /> EXPORT
+                  </button>
+                )}
+              </>
             )}
             <button onClick={resetDesigner} className="btn-secondary flex items-center gap-2">
               <Trash2 className="w-4 h-4" /> RESET
@@ -621,8 +725,60 @@ export function ShipDesigner() {
           </div>
         )}
 
-        {/* Validation */}
-        {validation && (
+        {hullDtons === 0 && (
+          <ShPanel no="SETUP" title="Initialize Design" kw="INIT" style={{ marginBottom: 18 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <ShData size={14} dim>
+                // SELECT A HULL SIZE TO BEGIN · ALL OTHER OPTIONS WILL BECOME AVAILABLE AFTER INITIALIZATION
+              </ShData>
+              <ShField
+                label="HULL SIZE"
+                value={hullCode}
+                options={hulls.map((h: Record<string, unknown>) => ({ value: String(h['DTONS']), label: `${String(h['DTONS'])} DT · ${fmtCost(Number(h['COST']))}` }))}
+                onChange={(v) => {
+                  setHullCode(v ?? '');
+                  if (v) {
+                    const selected = hulls.find((h: Record<string, unknown>) => String(h['DTONS']) === v);
+                    const dt = selected ? Number(selected['DTONS']) : 0;
+                    if (dt > 0 && !name) setName(generateShipName(dt));
+                    // Auto-populate bridge/cockpit
+                    if (dt <= 90) {
+                      const cockpit = smallCraftBridges[0];
+                      if (cockpit) {
+                        const bridgeDt = Number(cockpit['CONTROLS/ BRIDGE'] || cockpit['DTONS'] || cockpit['Tons'] || 0);
+                        const costPerDt = Number(cockpit['COST per DTON'] || cockpit['COST'] || 0);
+                        setCommandRows([{ id: `cmd-${Date.now()}`, name: String(cockpit['CONTROLS/BRidge'] || cockpit['Bridge Size'] || '1-man Cockpit'), dtons: bridgeDt, cost: costPerDt * bridgeDt, qty: 1 }]);
+                      }
+                    } else {
+                      const bridge = shipBridges[0];
+                      if (bridge) {
+                        const bridgeDt = Number(bridge['CONTROLS/ BRIDGE'] || bridge['DTONS'] || bridge['Tons'] || 0);
+                        const costPerDt = Number(bridge['COST per DTON'] || bridge['COST'] || 0);
+                        setCommandRows([{ id: `cmd-${Date.now()}`, name: String(bridge['CONTROLS/BRidge'] || bridge['Bridge Size'] || 'Bridge'), dtons: bridgeDt, cost: costPerDt * bridgeDt, qty: 1 }]);
+                      }
+                    }
+                  }
+                }}
+                hint={hullDtons > 0 ? `HP ${Math.floor(hullDtons / 50)} · SP ${Math.ceil(hullDtons / 50)} · HARDPOINTS ${Math.floor(hullDtons / 100)}` : 'SELECT HULL TO BEGIN'}
+              />
+              <div style={{ display: 'flex', gap: 14 }}>
+                <ShField label="SHIP DESIGNATION" value={name} onChange={(v) => setName(v ?? '')} />
+                <ShField label="TECH LEVEL" value={tl} type="number" flex={0.4} onChange={(v) => setTl(Number(v) || 0)} />
+              </div>
+              <ShField
+                label="CONFIGURATION"
+                value={config}
+                options={configs.map((c: Record<string, unknown>) => ({ value: String(c['Configuration']), label: `${String(c['Configuration'])} ${Number(c['Hull Cost Modifier']) > 0 ? '+' : ''}${Number(c['Hull Cost Modifier']) * 100}%` }))}
+                onChange={(v) => setConfig(v ?? 'Standard')}
+              />
+            </div>
+          </ShPanel>
+        )}
+
+        {hullDtons > 0 && (
+          <>
+            {/* Validation */}
+            {validation && (
           <div style={{
             marginBottom: 14,
             padding: '12px 16px',
@@ -750,19 +906,113 @@ export function ShipDesigner() {
         {/* Step 4: Drives & Power */}
         <Step num={4} title="Drives & Power" kw="PRP/PWR">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <ShField
-              label="M-DRIVE (THRUST)"
-              value={mDrive}
-              options={[{ value: '', label: '— NONE —' }, ...validMDrives.map((d: Record<string, unknown>) => {
-                const code = String(d['Drive Code']);
-                const thrust = getThrustPerformance(code);
-                const tons = Number(d['M-Drive\n Tons'] || 0);
-                const cost = Number(d['M-Drive COST'] || 0);
-                return { value: code, label: thrust !== null ? `THRUST-${thrust} · ${code} · ${fmtTons(tons)} · ${fmtCost(cost)}` : `${code} · ${fmtTons(tons)} · ${fmtCost(cost)}` };
-              })]}
-              onChange={(v) => setMDrive(v ?? '')}
-              hint={mDrive ? `${fmtTons(mDriveTons)} · ${fmtCost(mDriveCost)}` : 'NO MANEUVER DRIVE'}
+            <ChildTable
+              title="M-DRIVES"
+              items={mDriveRows}
+              onChange={setMDriveRows}
+              columns={[
+                { key: 'name', label: 'MODEL', editable: true, type: 'text' },
+                { key: 'dtons', label: 'DTONS', editable: true, type: 'number', width: 'w-20' },
+                { key: 'cost', label: 'COST', editable: true, type: 'number', width: 'w-24' },
+                { key: 'qty', label: 'QTY', editable: true, type: 'number', width: 'w-14' },
+              ]}
+              createNewItem={() => {
+                const d = drives.find((dr: Record<string, unknown>) => Number(dr['M-Drive\n Tons']) > 0);
+                return {
+                  id: `mdrive-${Date.now()}`,
+                  name: d ? String(d['Drive Code']) : 'A',
+                  dtons: d ? Number(d['M-Drive\n Tons'] || 0) : 2,
+                  cost: d ? Number(d['M-Drive COST'] || 0) : 4000000,
+                  qty: 1,
+                };
+              }}
+              addButtonLabel="ADD M-DRIVE"
+              summary={mDriveRows.length > 0 ? (
+                <ShData size={12} dim>
+                  THRUST: {mDriveRows.reduce((s, r) => s + (getThrustPerformance(r.name) || 0) * r.qty, 0)} · {mDriveRows.reduce((s, r) => s + r.dtons * r.qty, 0).toFixed(1)} DT
+                </ShData>
+              ) : undefined}
             />
+            <div style={{ marginTop: 4 }}>
+              <ShField
+                label="QUICK ADD M-DRIVE"
+                value=""
+                options={[{ value: '', label: '— SELECT FROM TABLE —' }, ...validMDrives.map((d: Record<string, unknown>) => {
+                  const code = String(d['Drive Code']);
+                  const thrust = getThrustPerformance(code);
+                  const tons = Number(d['M-Drive\n Tons'] || 0);
+                  const cost = Number(d['M-Drive COST'] || 0);
+                  return { value: code, label: thrust !== null ? `THRUST-${thrust} · ${code} · ${fmtTons(tons)} · ${fmtCost(cost)}` : `${code} · ${fmtTons(tons)} · ${fmtCost(cost)}` };
+                })]}
+                onChange={(v) => {
+                  if (!v) return;
+                  const d = drives.find((dr: Record<string, unknown>) => String(dr['Drive Code']) === v);
+                  if (d) {
+                    setMDriveRows(prev => [...prev, {
+                      id: `mdrive-${Date.now()}`,
+                      name: String(d['Drive Code']),
+                      dtons: Number(d['M-Drive\n Tons'] || 0),
+                      cost: Number(d['M-Drive COST'] || 0),
+                      qty: 1,
+                    }]);
+                  }
+                }}
+              />
+            </div>
+
+            <ChildTable
+              title="J-DRIVES"
+              items={jDriveRows}
+              onChange={setJDriveRows}
+              columns={[
+                { key: 'name', label: 'MODEL', editable: true, type: 'text' },
+                { key: 'dtons', label: 'DTONS', editable: true, type: 'number', width: 'w-20' },
+                { key: 'cost', label: 'COST', editable: true, type: 'number', width: 'w-24' },
+                { key: 'qty', label: 'QTY', editable: true, type: 'number', width: 'w-14' },
+              ]}
+              createNewItem={() => {
+                const d = drives.find((dr: Record<string, unknown>) => Number(dr['J-Drive\n Tons']) > 0);
+                return {
+                  id: `jdrive-${Date.now()}`,
+                  name: d ? String(d['Drive Code']) : 'A',
+                  dtons: d ? Number(d['J-Drive\n Tons'] || 0) : 10,
+                  cost: d ? Number(d['J-Drive COST'] || 0) : 10000000,
+                  qty: 1,
+                };
+              }}
+              addButtonLabel="ADD J-DRIVE"
+              summary={jDriveRows.length > 0 ? (
+                <ShData size={12} dim>
+                  {jDriveRows.reduce((s, r) => s + r.dtons * r.qty, 0).toFixed(1)} DT
+                </ShData>
+              ) : undefined}
+            />
+            <div style={{ marginTop: 4 }}>
+              <ShField
+                label="QUICK ADD J-DRIVE"
+                value=""
+                options={[{ value: '', label: '— SELECT FROM TABLE —' }, ...validJDrives.map((d: Record<string, unknown>) => {
+                  const code = String(d['Drive Code']);
+                  const tons = Number(d['J-Drive\n Tons'] || 0);
+                  const cost = Number(d['J-Drive COST'] || 0);
+                  return { value: code, label: `${code} · ${fmtTons(tons)} · ${fmtCost(cost)}` };
+                })]}
+                onChange={(v) => {
+                  if (!v) return;
+                  const d = drives.find((dr: Record<string, unknown>) => String(dr['Drive Code']) === v);
+                  if (d) {
+                    setJDriveRows(prev => [...prev, {
+                      id: `jdrive-${Date.now()}`,
+                      name: String(d['Drive Code']),
+                      dtons: Number(d['J-Drive\n Tons'] || 0),
+                      cost: Number(d['J-Drive COST'] || 0),
+                      qty: 1,
+                    }]);
+                  }
+                }}
+              />
+            </div>
+
             <div style={{ display: 'flex', gap: 14 }}>
               <ShField
                 label="JUMP PARSECS"
@@ -771,41 +1021,41 @@ export function ShipDesigner() {
                 onChange={(v) => setJumpParsecs(Number(v))}
               />
               <ShField
-                label="J-DRIVE"
-                value={jDrive}
-                options={[{ value: '', label: jumpParsecs === 0 ? 'N/A' : '— NONE —' }, ...validJDrives.map((d: Record<string, unknown>) => {
+                label="POWER PLANT"
+                value={powerPlant}
+                options={[{ value: '', label: '— NONE —' }, ...validPPs.map((d: Record<string, unknown>) => {
                   const code = String(d['Drive Code']);
-                  const tons = Number(d['J-Drive\n Tons'] || 0);
-                  const cost = Number(d['J-Drive COST'] || 0);
+                  const tons = Number(d['P-Plant\n Tons'] || 0);
+                  const cost = Number(d['PP COST'] || 0);
                   return { value: code, label: `${code} · ${fmtTons(tons)} · ${fmtCost(cost)}` };
                 })]}
-                onChange={(v) => setJDrive(v ?? '')}
-                hint={jDrive && jumpParsecs > 0 ? `JUMP-${jumpParsecs} · ${fmtTons(jDriveTons)} · ${fmtCost(jDriveCost)}` : 'SUBLIGHT ONLY'}
+                onChange={(v) => setPowerPlant(v ?? '')}
+                hint={powerPlant ? `${fmtTons(ppTons)} · ${fmtCost(ppCost)} · FUEL/WK ${ppFuelWk} TONS` : '—'}
               />
             </div>
-            <ShField
-              label="POWER PLANT"
-              value={powerPlant}
-              options={[{ value: '', label: '— NONE —' }, ...validPPs.map((d: Record<string, unknown>) => {
-                const code = String(d['Drive Code']);
-                const tons = Number(d['P-Plant\n Tons'] || 0);
-                const cost = Number(d['PP COST'] || 0);
-                return { value: code, label: `${code} · ${fmtTons(tons)} · ${fmtCost(cost)}` };
-              })]}
-              onChange={(v) => setPowerPlant(v ?? '')}
-              hint={powerPlant ? `${fmtTons(ppTons)} · ${fmtCost(ppCost)} · FUEL/WK ${ppFuelWk} TONS` : '—'}
-            />
-            {mDrive && jDrive && powerPlant && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                {getMinPowerPlantLetter(mDrive, jDrive) <= powerPlant
-                  ? <CheckCircle size={14} style={{ color: colors.good }} />
-                  : <AlertTriangle size={14} style={{ color: colors.warn }} />
-                }
-                <ShData size={12} good={getMinPowerPlantLetter(mDrive, jDrive) <= powerPlant} warn={getMinPowerPlantLetter(mDrive, jDrive) > powerPlant}>
-                  PP ≥ {getMinPowerPlantLetter(mDrive, jDrive)} REQUIRED
-                </ShData>
-              </div>
-            )}
+            {(() => {
+              const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+              const maxM = mDriveRows.length > 0
+                ? Math.max(...mDriveRows.map(r => letters.indexOf(r.name.toUpperCase())).filter(i => i >= 0))
+                : letters.indexOf(mDrive.toUpperCase());
+              const maxJ = jDriveRows.length > 0
+                ? Math.max(...jDriveRows.map(r => letters.indexOf(r.name.toUpperCase())).filter(i => i >= 0))
+                : letters.indexOf(jDrive.toUpperCase());
+              const maxIdx = Math.max(maxM, maxJ);
+              const minPP = maxIdx >= 0 ? letters[maxIdx] : '';
+              const hasDrives = (mDriveRows.length > 0 || mDrive) && (jDriveRows.length > 0 || jDrive) && powerPlant;
+              return hasDrives && minPP ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  {minPP <= powerPlant
+                    ? <CheckCircle size={14} style={{ color: colors.good }} />
+                    : <AlertTriangle size={14} style={{ color: colors.warn }} />
+                  }
+                  <ShData size={12} good={minPP <= powerPlant} warn={minPP > powerPlant}>
+                    PP ≥ {minPP} REQUIRED
+                  </ShData>
+                </div>
+              ) : null;
+            })()}
           </div>
         </Step>
 
@@ -1397,6 +1647,8 @@ export function ShipDesigner() {
             <ShData size={13} dim>// SELECT A HULL TO CALCULATE CREW REQUIREMENTS</ShData>
           )}
         </Step>
+          </>
+        )}
       </div>
 
       {/* RIGHT: Summary Panel */}
