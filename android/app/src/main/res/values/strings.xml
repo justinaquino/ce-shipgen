@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">CE ShipGen</string>
+    <string name="title_activity_main">CE ShipGen</string>
+    <string name="package_name">com.gi7b.ce_shipgen</string>
+    <string name="custom_url_scheme">com.gi7b.ce_shipgen</string>
+</resources>

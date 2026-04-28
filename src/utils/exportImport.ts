@@ -95,7 +95,7 @@ export function exportShipToFoundryVTT(ship: ShipDesign): string {
     },
     flags: {
       'ce-shipgen': {
-        version: '0.02',
+        version: '0.03',
         exportedAt: new Date().toISOString(),
         raw: ship,
       },
